@@ -4,7 +4,16 @@ display_name: Markdown 文档站生成器
 display_name_en: Markdown Documentation Website Builder
 description_zh: "将 Markdown 教程、笔记、课件和手册转换为支持导航、全文搜索、代码高亮和图片放大的文档站，支持站点更新、门户聚合及远程部署。"
 description_en: "Convert Markdown tutorials, notes, and manuals into documentation websites with navigation, full-text search, syntax highlighting, and image zoom. Supports site updates, portal aggregation, and remote deployment."
-version: 1.0.0
+version: 1.0.1
+examples_zh:
+  - "把我的 Markdown 教程目录生成带章节导航、全文搜索、代码高亮和图片放大的文档站，输出到独立目录，不要修改源文档。"
+  - "更新已有的 Markdown 文档站，自动识别新增章节并重新构建，保留现有部署配置，先不要部署到服务器。"
+  - "创建一个文档门户，把多个文档站挂为子模块并添加返回门户入口；确认服务器配置后再部署。"
+examples_en:
+  - "Turn my Markdown tutorial folder into a documentation website with chapter navigation, full-text search, syntax highlighting, and image zoom. Write the output to a separate folder without modifying the source documents."
+  - "Update my existing Markdown documentation website, detect new chapters, and rebuild it while preserving deployment settings. Do not deploy it to the server yet."
+  - "Create a documentation portal, attach multiple documentation websites as submodules, and add links back to the portal. Deploy only after the server settings are confirmed."
+agent_created: true
 author: binny
 description: "把一个 Markdown 文档项目（多章节教程、笔记、课件、手册）改造为静态文档站，并支持一键部署到远程服务器。自动识别章节目录、生成侧边栏导航/首页/全文搜索/代码高亮/图片放大，自动检测并修复会导致 Vue 编译器报错的语法冲突。当用户说「把 md 转成 html」「md 项目做成文档站」「课件/笔记/文档做成网站」「生成文档站」「部署文档站到服务器」「更新站点」「更新文档站」「重建站点」「同步站点」「重新发布」「部署更新」时使用。更新站点时会自动查找已生成的站点，多个时让用户选择。当用户说「门户」「子模块」「多站点聚合」「挂到门户」「返回门户」时，使用门户功能把多个站点聚合成一个入口。"
 ---
