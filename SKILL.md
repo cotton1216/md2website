@@ -4,7 +4,7 @@ display_name: Markdown 文档站生成器
 display_name_en: Markdown Documentation Website Builder
 description_zh: "将 Markdown 教程、笔记、课件和手册转换为支持导航、全文搜索、代码高亮和图片放大的文档站，支持站点更新、门户聚合及远程部署。"
 description_en: "Convert Markdown tutorials, notes, and manuals into documentation websites with navigation, full-text search, syntax highlighting, and image zoom. Supports site updates, portal aggregation, and remote deployment."
-version: 1.0.2
+version: 1.0.3
 examples_zh:
   - "把我的 Markdown 教程目录生成带章节导航、全文搜索、代码高亮和图片放大的文档站，输出到独立目录，不要修改源文档。"
   - "更新已有的 Markdown 文档站，自动识别新增章节并重新构建，保留现有部署配置，先不要部署到服务器。"
@@ -330,7 +330,7 @@ python3 "$SKILL_DIR"/scripts/update.py "<站点目录>" --dry-run  # 只看计�
 
 ## 门户与子模块（多站点聚合）
 
-把多个站点聚合成一个「门户」入口：门户首页列出所有子模块，点击进入各子站点；子模块顶部导航带「返回门户」入口。
+把多个站点聚合成一个「门户」入口：门户首页列出所有子模块，点击进入各子站点；门户与各子模块顶部导航都带「子模块切换」入口，子模块还带「返回门户」入口。
 
 ### 生成门户
 
@@ -365,6 +365,12 @@ python3 "$SKILL_DIR"/scripts/profile.py submodule --project "<站点目录>"
 子模块挂门户后，顶部导航自动出现「返回门户」入口：`deploy.sh` 与 `update.py` 都会在构建时把门户 URL 注入 `PORTAL_URL`（优先取站点 `PORTAL_URL`，否则从 `PORTAL_PROJECT` 的门户配置 `portal_url` 或 `remote_dir` 域名推断）。**用 `update.py` 更新子模块同样保留该入口**，不要手工补。
 
 核验：构建后 `grep -rl '返回门户' docs/.vitepress/dist | wc -l` 应等于页面数；为 0 说明子模块漏配 `PORTAL_URL` / `PORTAL_PROJECT`，先 `profile.py submodule --project <站点目录>` 补齐再重建。
+
+### 子模块切换（顶部切换入口）
+
+门户顶部导航与每个子模块顶部导航都带「子模块切换」入口：门户平铺所有子模块，子模块平铺兄弟子模块，点标题直接跳转。入口由主题组件 `PortalNav.vue` 渲染，模块清单统一取自门户根的 `modules.json.php`（子模块通过 `themeConfig.portal.url` 找到门户根，该值由 `PORTAL_URL` 注入）。最多 4 个模块直接平铺，更多时收进「全部模块」下拉；不用 `frequentModules`，门户配置里留 `portal: {}` 即可。
+
+核验：构建后门户与子模块的 `docs/.vitepress/dist` 里 `grep -rl '模块导航'` 都应命中；子模块线上 HTML 里能看到 `portal-nav-home`（返回门户链接）且 `portal.url` 指向门户根；访问子模块页，顶部能点到兄弟子模块与「返回门户」。
 
 ## 常见故障
 

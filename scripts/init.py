@@ -425,9 +425,8 @@ export default defineConfig({
     nav: [
       { text: '首页', link: '/' },
       { text: '文档', link: '/@@FIRST@@/' },
-      // 子模块挂门户时，deploy.sh 会注入 PORTAL_URL 环境变量，添加「返回门户」入口
-      ...(process.env.PORTAL_URL ? [{ text: '返回门户', link: process.env.PORTAL_URL, target: '_blank' }] : [])
     ],
+    portal: process.env.PORTAL_URL ? { url: process.env.PORTAL_URL } : {},
     sidebar: [
       {
         text: '目录',
@@ -458,9 +457,11 @@ export default defineConfig({
 '''
 
 
-THEME_INDEX = '''import DefaultTheme from 'vitepress/theme'
-import { onMounted, watch, nextTick } from 'vue'
+THEME_INDEX = r'''import { h, onMounted, watch, nextTick } from 'vue'
+import DefaultTheme from 'vitepress/theme'
 import { useRoute } from 'vitepress'
+import PortalNav from './PortalNav.vue'
+import { createModuleCatalog, moduleCatalogKey } from './moduleCatalog.mjs'
 import mermaid from 'mermaid'
 import './custom.css'
 
@@ -515,6 +516,13 @@ function installZoom() {
 
 export default {
   extends: DefaultTheme,
+  Layout: () => h(DefaultTheme.Layout, null, {
+    'nav-bar-content-after': () => h(PortalNav),
+    'nav-screen-content-after': () => h(PortalNav, { mobile: true })
+  }),
+  enhanceApp({ app }) {
+    app.provide(moduleCatalogKey, createModuleCatalog())
+  },
   setup() {
     const route = useRoute()
     const run = () => nextTick(() => setTimeout(() => { installZoom(); renderMermaid() }, 60))
@@ -702,7 +710,7 @@ function go(link) {
 '''
 
 # 门户顶部动态下拉导航：fetch modules.json.php 渲染模块菜单，整页跳转避免 SPA 拦截
-PORTAL_NAV = '''<script setup>
+PORTAL_NAV = r'''<script setup>
 import { computed, ref } from 'vue'
 import { useData, withBase } from 'vitepress'
 import { useModuleCatalog } from './moduleCatalog.mjs'
@@ -711,10 +719,18 @@ defineProps({ mobile: Boolean })
 const { theme } = useData()
 const { modules, loading, error, load } = useModuleCatalog()
 const menu = ref(null)
-const frequent = computed(() => {
-  const names = theme.value.portal?.frequentModules ?? ['langchain', 'redis']
-  return names.map((name) => modules.value.find((item) => item.name === name)).filter(Boolean)
+
+// 顶部直接展示的模块数上限，其余收进「全部模块」下拉
+const MAX_DIRECT = 4
+
+const portalUrl = computed(() => {
+  const u = theme.value.portal?.url
+  return (typeof u === 'string' && u) ? u : ''
 })
+const isPortal = computed(() => !portalUrl.value)
+
+const direct = computed(() => modules.value.slice(0, MAX_DIRECT))
+const overflow = computed(() => modules.value.slice(MAX_DIRECT))
 
 function closeMenu() {
   if (menu.value) menu.value.open = false
@@ -731,14 +747,14 @@ function go(link) {
 
 <template>
   <nav class="portal-nav" :class="{ 'portal-nav-mobile': mobile }" aria-label="模块导航">
-    <a v-for="m in frequent" :key="m.name" :href="m.link" @click.prevent="go(m.link)" class="portal-nav-trigger">{{ m.title }}</a>
-    <details ref="menu" class="portal-nav-item" @keydown.esc="closeMenu" @focusout="closeOutside">
+    <a v-for="m in direct" :key="m.name" :href="m.link" @click.prevent="go(m.link)" class="portal-nav-trigger">{{ m.title }}</a>
+    <details v-if="overflow.length" ref="menu" class="portal-nav-item" @keydown.esc="closeMenu" @focusout="closeOutside">
       <summary class="portal-nav-trigger">全部模块 <span class="portal-nav-caret" aria-hidden="true">▾</span></summary>
       <div class="portal-nav-dropdown">
       <p v-if="loading" role="status">正在加载…</p>
       <p v-else-if="error" role="alert">加载失败 <button type="button" @click="load">重试</button></p>
-      <p v-else-if="modules.length === 0">暂无模块</p>
-      <a v-for="m in modules" :key="m.name"
+      <p v-else-if="overflow.length === 0">暂无模块</p>
+      <a v-for="m in overflow" :key="m.name"
          :href="m.link"
          @click.prevent="go(m.link)"
          class="portal-nav-link">
@@ -747,7 +763,7 @@ function go(link) {
       </a>
       </div>
     </details>
-    <a :href="withBase('/')" target="_self" class="portal-nav-trigger portal-nav-home">首页</a>
+    <a :href="isPortal ? withBase('/') : portalUrl" :target="isPortal ? '_self' : '_blank'" class="portal-nav-trigger portal-nav-home">{{ isPortal ? '首页' : '返回门户' }}</a>
   </nav>
 </template>
 
@@ -845,37 +861,43 @@ function go(link) {
 </style>
 '''
 
-PORTAL_MODULE_CATALOG = '''import { inject, onMounted, ref } from 'vue'
-import { withBase } from 'vitepress'
+PORTAL_MODULE_CATALOG = r'''import { computed, inject, onMounted, ref } from 'vue'
+import { useData, withBase } from 'vitepress'
 
 export const moduleCatalogKey = Symbol('portal-module-catalog')
+
+// 门户的模块清单地址：子模块通过 theme.portal.url 指向门户根，再取门户根的 modules.json.php；
+// 门户自身则取当前站点的 modules.json.php。
+function catalogUrl(theme) {
+  const portal = theme && theme.portal
+  const url = portal && typeof portal.url === 'string' ? portal.url : ''
+  if (url) return url.replace(/\/+$/, '') + '/modules.json.php'
+  return withBase('/modules.json.php')
+}
 
 export function createModuleCatalog() {
   const modules = ref([])
   const loading = ref(true)
   const error = ref(false)
   let pending
-  let loaded = false
 
-  async function load() {
+  async function load(url) {
     if (pending) return pending
-    if (loaded) return
     loading.value = true
     error.value = false
     pending = (async () => {
       try {
-        const response = await fetch(withBase('/modules.json.php'))
+        const response = await fetch(url)
         if (!response.ok) throw new Error('模块清单请求失败')
         const data = await response.json()
         if (!Array.isArray(data)) throw new Error('模块清单格式错误')
         const names = new Set()
         modules.value = data.filter((item) => {
           if (!item || typeof item.name !== 'string' || typeof item.title !== 'string' || typeof item.link !== 'string') return false
-          if (names.has(item.name) || !/^(?:https?:\\/\\/|\\/(?!\\/))/i.test(item.link)) return false
+          if (names.has(item.name) || !/^(?:https?:\/\/|\/(?!\/))/i.test(item.link)) return false
           names.add(item.name)
           return true
         })
-        loaded = true
       } catch {
         error.value = true
       } finally {
@@ -891,10 +913,26 @@ export function createModuleCatalog() {
 
 export function useModuleCatalog() {
   const catalog = inject(moduleCatalogKey)
-  onMounted(catalog.load)
-  return catalog
+  const { theme } = useData()
+  const url = computed(() => catalogUrl(theme.value))
+  onMounted(() => catalog.load(url.value))
+  return {
+    modules: catalog.modules,
+    loading: catalog.loading,
+    error: catalog.error,
+    load: () => catalog.load(url.value)
+  }
 }
 '''
+
+PORTAL_NAV_CSS = '''/* 顶部顺序：模块切换入口 → 主题按钮（子模块同样适用） */
+@media (min-width: 768px) {
+  .VPNavBar .content-body > .appearance { order: 1; }
+  .VPNavBar .content-body > .portal-nav { order: 0; }
+  .VPNavBar .content-body > .appearance::before { display: none; }
+}
+'''
+
 
 # 门户子模块清单动态接口（PHP 实时扫描直接子目录的 site.json）
 PORTAL_PHP = '''<?php
@@ -1413,7 +1451,7 @@ export default defineConfig({
   themeConfig: {
     outline: { level: [2, 3], label: '本页章节' },
     nav: [],
-    portal: { frequentModules: ['langchain', 'redis'] },
+    portal: {},
     sidebar: [],
     search: {
       provider: 'local',
@@ -1867,7 +1905,9 @@ def main():
         'SIDEBAR_ITEMS': sidebar_items,
     }))
     write(os.path.join(docs, '.vitepress', 'theme', 'index.mjs'), THEME_INDEX)
-    write(os.path.join(docs, '.vitepress', 'theme', 'custom.css'), CUSTOM_CSS)
+    write(os.path.join(docs, '.vitepress', 'theme', 'PortalNav.vue'), PORTAL_NAV)
+    write(os.path.join(docs, '.vitepress', 'theme', 'moduleCatalog.mjs'), PORTAL_MODULE_CATALOG)
+    write(os.path.join(docs, '.vitepress', 'theme', 'custom.css'), CUSTOM_CSS + PORTAL_NAV_CSS)
     write(os.path.join(docs, 'public', 'favicon.svg'), make_favicon_svg(title))
     features = '\n'.join(feature_items) if feature_items else (
         f'  - title: 开始阅读\n    details: 打开第一篇文档\n    link: /{first_link}/')
