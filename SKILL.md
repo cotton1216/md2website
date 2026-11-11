@@ -4,7 +4,7 @@ display_name: Markdown 文档站生成器
 display_name_en: Markdown Documentation Website Builder
 description_zh: "将 Markdown 教程、笔记、课件和手册转换为支持导航、全文搜索、代码高亮和图片放大的文档站，支持站点更新、门户聚合及远程部署。"
 description_en: "Convert Markdown tutorials, notes, and manuals into documentation websites with navigation, full-text search, syntax highlighting, and image zoom. Supports site updates, portal aggregation, and remote deployment."
-version: 1.0.1
+version: 1.0.2
 examples_zh:
   - "把我的 Markdown 教程目录生成带章节导航、全文搜索、代码高亮和图片放大的文档站，输出到独立目录，不要修改源文档。"
   - "更新已有的 Markdown 文档站，自动识别新增章节并重新构建，保留现有部署配置，先不要部署到服务器。"
@@ -315,6 +315,7 @@ python3 "$SKILL_DIR"/scripts/update.py "<站点目录>" --dry-run  # 只看计�
 3. 用 `init.py --force` 原地重建（**新增章节自动进侧边栏**）
 4. 保留 `.deploy-local.yml` 与 `node_modules`，不会重配服务器
 5. 构建；加 `--deploy` 才执行 `./deploy.sh`
+6. 构建时若站点是门户子模块（配置了 `PORTAL_URL` / `PORTAL_PROJECT`），自动注入「返回门户」入口
 
 无交互终端下，脚本会输出 `{"action": "choose"}` 或 `{"action": "need_source"}` JSON，
 按里面的信息向用户确认后再带参数重跑。**更新完成后必须核对页面数与图片数。**
@@ -361,7 +362,9 @@ python3 "$SKILL_DIR"/scripts/profile.py submodule --project "<站点目录>"
 
 ### 子模块返回门户
 
-子模块挂门户后，顶部导航自动出现「返回门户」入口（部署时由 `deploy.sh` 从门户 `REMOTE_DIR` 推断门户 URL 注入）。
+子模块挂门户后，顶部导航自动出现「返回门户」入口：`deploy.sh` 与 `update.py` 都会在构建时把门户 URL 注入 `PORTAL_URL`（优先取站点 `PORTAL_URL`，否则从 `PORTAL_PROJECT` 的门户配置 `portal_url` 或 `remote_dir` 域名推断）。**用 `update.py` 更新子模块同样保留该入口**，不要手工补。
+
+核验：构建后 `grep -rl '返回门户' docs/.vitepress/dist | wc -l` 应等于页面数；为 0 说明子模块漏配 `PORTAL_URL` / `PORTAL_PROJECT`，先 `profile.py submodule --project <站点目录>` 补齐再重建。
 
 ## 常见故障
 

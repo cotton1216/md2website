@@ -49,6 +49,45 @@ def _config_base(path):
     return m.group(1) if m else '/'
 
 
+def _read_deploy_local(site):
+    """读取站点 .deploy-local.yml（KEY: VALUE 文本），返回 dict。"""
+    path = os.path.join(site, '.deploy-local.yml')
+    cfg = {}
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or ':' not in line:
+                    continue
+                key, _, value = line.partition(':')
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key:
+                    cfg[key] = value
+    except OSError:
+        pass
+    return cfg
+
+
+def _resolve_portal_url(site):
+    """按 deploy.sh 的规则解析门户 URL，供构建时注入「返回门户」入口。"""
+    cfg = _read_deploy_local(site)
+    portal_url = cfg.get('PORTAL_URL') or cfg.get('portal_url')
+    if portal_url:
+        return portal_url
+    portal_project = cfg.get('PORTAL_PROJECT') or cfg.get('portal_project')
+    if portal_project and os.path.isdir(portal_project):
+        pcfg = _read_deploy_local(portal_project)
+        portal_url = pcfg.get('portal_url') or pcfg.get('PORTAL_URL')
+        if portal_url:
+            return portal_url
+        remote_dir = pcfg.get('remote_dir') or pcfg.get('REMOTE_DIR') or ''
+        m = re.match(r'^/www/wwwroot/([^/]+)', remote_dir)
+        if m:
+            return 'https://%s/' % m.group(1)
+    return None
+
+
 def choose(site_arg):
     """定位站点：路径 → 匹配；未给 → 自动查找，多个则交互选择"""
     if site_arg:
@@ -94,9 +133,9 @@ def choose(site_arg):
         print(f'  输入无效，请填 1-{len(found)}')
 
 
-def run(cmd, cwd):
+def run(cmd, cwd, env=None):
     print(f'  $ {" ".join(cmd)}')
-    proc = subprocess.run(cmd, cwd=cwd)
+    proc = subprocess.run(cmd, cwd=cwd, env=env)
     return proc.returncode
 
 
@@ -162,7 +201,7 @@ def main():
     if args.no_build:
         return 0
 
-    # 3. 构建
+    # 3. 构建（子模块挂门户时注入 PORTAL_URL，保证「返回门户」入口不丢）
     npm = shutil.which('npm')
     if not npm:
         print('未找到 npm，请先安装 Node.js 18+ 再构建', file=sys.stderr)
@@ -171,7 +210,12 @@ def main():
         if run([npm, 'install'], site) != 0:
             print('依赖安装失败', file=sys.stderr)
             return 1
-    if run([npm, 'run', 'build'], site) != 0:
+    build_env = dict(os.environ)
+    portal_url = _resolve_portal_url(site)
+    if portal_url:
+        build_env['PORTAL_URL'] = portal_url
+        print(f'  注入「返回门户」入口：{portal_url}')
+    if run([npm, 'run', 'build'], site, env=build_env) != 0:
         print('构建失败', file=sys.stderr)
         return 1
 
