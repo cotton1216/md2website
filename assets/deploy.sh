@@ -470,6 +470,8 @@ if [ "$CLEAN_MODE" = "manifest" ] && [ -f "\$MANIFEST" ]; then
       if [ -e "\$rel" ]; then rm -f -- "\$rel"; fi
     fi
   done < "\$MANIFEST"
+  # 清理后修剪空目录（旧版目录式页面删除后残留的空壳）
+  find . -mindepth 1 -type d -empty -delete 2>/dev/null || true
 elif [ "$CLEAN_MODE" = "all" ]; then
   # 保留清单与 .user.ini（宝塔防跨站配置），只清空站点目录内的其余内容
   find . -mindepth 1 -maxdepth 1 ! -name ".deploy-manifest" ! -name ".user.ini" -exec rm -rf {} +

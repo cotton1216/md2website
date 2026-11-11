@@ -424,7 +424,7 @@ export default defineConfig({
     outline: @@OUTLINE@@,
     nav: [
       { text: '首页', link: '/' },
-      { text: '文档', link: '/@@FIRST@@/' },
+      { text: '文档', link: '@@FIRST@@' },
     ],
     portal: process.env.PORTAL_URL ? { url: process.env.PORTAL_URL } : {},
     sidebar: [
@@ -1371,10 +1371,10 @@ hero:
   actions:
     - theme: brand
       text: 开始阅读
-      link: /@@FIRST@@/
+      link: @@FIRST@@
     - theme: alt
       text: 文档首页
-      link: /@@FIRST@@/
+      link: @@FIRST@@
 
 features:
 @@FEATURES@@
@@ -1868,7 +1868,7 @@ def main():
 
     first = nav_entries[0]
     first_link = (first["items"][0]["link"] if first["type"] == "group"
-                  else first["link"]).strip('/')
+                  else first["link"])
 
     # ---- 生成配置 ----
     chapter_items = ',\n'.join(
@@ -1910,7 +1910,7 @@ def main():
     write(os.path.join(docs, '.vitepress', 'theme', 'custom.css'), CUSTOM_CSS + PORTAL_NAV_CSS)
     write(os.path.join(docs, 'public', 'favicon.svg'), make_favicon_svg(title))
     features = '\n'.join(feature_items) if feature_items else (
-        f'  - title: 开始阅读\n    details: 打开第一篇文档\n    link: /{first_link}/')
+        f'  - title: 开始阅读\n    details: 打开第一篇文档\n    link: {first_link}')
     write(os.path.join(docs, 'index.md'), render(HOME_TMPL, {
         'TITLE': title,
         'SUBTITLE': args.subtitle or '文档站',
