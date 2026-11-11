@@ -451,7 +451,7 @@ export default defineConfig({
     returnToTopLabel: '回到顶部',
     sidebarMenuLabel: '目录',
     darkModeSwitchLabel: '主题',
-    lastUpdated: { text: '最后更新' }
+    lastUpdated: false
   }
 })
 '''
@@ -1471,7 +1471,7 @@ export default defineConfig({
     returnToTopLabel: '回到顶部',
     sidebarMenuLabel: '目录',
     darkModeSwitchLabel: '主题',
-    lastUpdated: { text: '最后更新' }
+    lastUpdated: false
   }
 })
 '''
