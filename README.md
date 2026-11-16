@@ -28,6 +28,77 @@ Agent 会克隆仓库并执行 `./install.sh`。非交互环境下脚本默认�
 git clone git@github.com:cotton1216/md2website.git ~/md2website && cd ~/md2website && ./install.sh --all
 ```
 
+## 在桌面 Agent 里使用（推荐）
+
+装好并新开一个会话后，直接对 Agent 说「把这个目录做成文档站 / 生成文档站 / 部署文档站到服务器」即可，Agent 会读 `SKILL.md` 执行完整流程。也可以显式指定源目录：
+
+```
+Use Skill: md2website /path/to/md目录 生成站点
+```
+
+扫描、生成、构建、预览都由 Agent 完成，不需要你手动敲命令。
+
+### 更新已有站点
+
+源 Markdown 改完后，直接对 Agent 说「更新站点」「重建站点」「同步站点」，它会自动查找并原地重建；新增章节自动进侧边栏，`.deploy-local.yml` 与 `node_modules` 会被保留，不用重新配服务器。手动命令见附录「命令行方式」。
+
+### 门户与子模块（多站点聚合）
+
+门户是聚合入口：首页列出所有子站点，子模块顶部带「返回门户」。**设定角色与发布是两套动作**，`deploy.sh` 没有 `--portal` / `--submodule` 参数：
+
+| 动作 | 方式 | 频率 |
+| --- | --- | --- |
+| 生成门户 | `init.py --portal`（`build.sh` 不支持 `--portal`，必须直调 `init.py`） | 一次性 |
+| 生成普通站点 | `build.sh` 或 `init.py` | 一次性 |
+| 挂为子模块 | `profile.py submodule --project <站点目录>` | 一次性 |
+| 发布 | 门户与子模块各自执行所在目录的 `./deploy.sh` | 每次更新 |
+
+首次顺序：**先建门户并部署，再建站点、挂子模块、部署**。门户首页由 PHP 实时扫描直接子目录里的 `site.json`，子模块部署后刷新页面即出现，无需重建门户。
+
+#### 在桌面 Agent 里用对话完成（推荐）
+
+不必记命令，把下面几句话发给 Agent 即可；括号里是 Agent 实际执行的脚本，仅供核对。
+
+**1. 首次创建门户并部署**
+
+```
+用 md2website 建一个文档门户，输出到 ~/docs/my-portal，标题「文档门户」
+```
+
+Agent 执行 `init.py --portal`，随后进入服务器配置。服务器信息由你在终端亲自填写。
+
+**2. 首次把站点挂成子模块**
+
+先建普通站点：
+
+```
+把 ~/notes/mydocs 做成文档站，输出到 ~/notes/mydocs-site
+```
+
+生成结束时问「是否现在配置服务器」，**选 `N`**（子模块的服务器信息要单独推导）。再挂载：
+
+```
+把 ~/notes/mydocs-site 挂到门户 ~/docs/my-portal，子目录名 my-docs
+```
+
+Agent 执行 `profile.py submodule`，自动推导并写入 `.deploy-local.yml`：`REMOTE_DIR` = 门户远程目录 + `my-docs`，`SITE_BASE` = 门户 `SITE_BASE` + `my-docs/`，`PORTAL_PROJECT` = 本机门户项目路径。
+
+**3. 已有站点再次发布**
+
+```
+更新并部署 my-docs 站点
+```
+
+Agent 先用 `sites.py list` 定位站点（多个时让你选），再执行 `update.py --deploy` 原地重建并发布。已挂门户的站点会保留「返回门户」入口，不需要再跑一次 `submodule`。
+
+#### 需要你亲自动手的三件事
+
+| 事项 | 原因 |
+| --- | --- |
+| 交互向导里填写主机、账号、端口、密码或私钥 | 向导用 `input()` 读终端，Agent 无法代输，也不应接触密码 |
+| 服务器上预建 `REMOTE_DIR`、装 PHP、配 nginx 回退规则 | 目标目录不存在脚本直接报错；门户首页清单与 `cleanUrls` 依赖运行环境 |
+| 首次用密钥登录前执行 `ssh-copy-id` | 脚本不会尝试密码硬闯，连通失败会打印可复制的命令 |
+
 ## 功能特性
 
 | 能力 | 说明 |
@@ -45,7 +116,11 @@ git clone git@github.com:cotton1216/md2website.git ~/md2website && cd ~/md2websi
 
 ---
 
-## 环境要求
+## 附录：更多细节
+
+以下内容面向需要手动安装、排错、精细控制或理解部署机制的读者；日常使用只需看上面的「在桌面 Agent 里使用」。
+
+### 环境要求
 
 | 依赖 | 版本 | 用途 | 检查 |
 | --- | --- | --- | --- |
@@ -64,11 +139,9 @@ git clone git@github.com:cotton1216/md2website.git ~/md2website && cd ~/md2websi
   ```
 - Windows：装好 Node.js 后用 **WSL** 或 **Git Bash** 运行
 
----
+### 手动安装与卸载
 
-## 安装
-
-### 方式一：从仓库安装
+#### 从仓库安装
 
 ```bash
 git clone git@github.com:cotton1216/md2website.git md2website
@@ -163,9 +236,9 @@ python3 ~/.workbuddy/skills/md2website/scripts/profile.py wizard --project "$(pw
 ./deploy.sh             # 构建 + 上传 + 远程解压 + 校验
 ```
 
-更多参数见下方「使用」章节；首次构建会安装 npm 依赖，通常需要 1–3 分钟。
+首次构建会安装 npm 依赖，通常需要 1–3 分钟。
 
-### 方式二：安装到自定义目录
+#### 安装到自定义目录
 
 ```bash
 ./install.sh --dir ~/my-skills/md2website
@@ -176,7 +249,7 @@ python3 ~/.workbuddy/skills/md2website/scripts/profile.py wizard --project "$(pw
 
 安装到别处时，把下文命令里的 `~/.workbuddy/skills/md2website` 换成实际路径。
 
-### 安装前后的检查
+#### 安装前后的检查
 
 ```bash
 ./install.sh --check     # 只检查环境（Python / Node 版本），不安装
@@ -184,7 +257,7 @@ python3 ~/.workbuddy/skills/md2website/scripts/profile.py wizard --project "$(pw
 python3 ~/.workbuddy/skills/md2website/scripts/_env.py   # 安装后再自检一次
 ```
 
-### 卸载
+#### 卸载
 
 ```bash
 ./install.sh --uninstall                        # 当前目录是安装副本时，只删这一份
@@ -197,21 +270,9 @@ python3 ~/.workbuddy/skills/md2website/scripts/_env.py   # 安装后再自检一
 
 > 仓库里的 `install.sh` 只复制 `SKILL.md`、`scripts/`、`assets/`、文档等必要文件，不会带上 `.git` 与临时产物。
 
----
+### 命令行方式
 
-## 使用
-
-### 方式一：在 AI Agent 里使用（推荐）
-
-装好并新开一个会话后，直接对 Agent 说「把这个目录做成文档站 / 生成文档站 / 部署文档站到服务器」即可，Agent 会读 `SKILL.md` 执行完整流程。也可以显式指定源目录：
-
-```
-Use Skill: md2website /path/to/md目录 生成站点
-```
-
-扫描、生成、构建、预览都由 Agent 完成，不需要你手动敲命令。
-
-### 方式二：一键建站（脚本直接跑）
+#### 一键建站（脚本直接跑）
 
 把入口脚本复制到你的 Markdown 目录，双击或执行即可：
 
@@ -248,7 +309,7 @@ cd ~/你的md目录 && ./build.sh
 ./build.sh --dir ~/笔记/课程 --out ~/笔记/课程-site --title "我的课程" --name my-course --no-open
 ```
 
-### 方式三：分步命令行（排错或精细控制）
+#### 分步命令行（排错或精细控制）
 
 ```bash
 SKILL=~/.workbuddy/skills/md2website
@@ -291,9 +352,9 @@ python3 $SKILL/scripts/fix.py ~/你的md目录-site/docs --dry-run   # 只看不
 npm run build
 ```
 
-### 方式四：更新已有站点
+#### 更新已有站点（命令）
 
-源 Markdown 改完后，不需要重新指定路径。直接对 Agent 说「更新站点」「重建站点」「同步站点」，它会自动查找：
+源 Markdown 改完后，不需要重新指定路径，直接跑查找脚本：
 
 ```bash
 python3 $SKILL/scripts/sites.py list          # 看看有哪些站点
@@ -306,13 +367,11 @@ python3 $SKILL/scripts/update.py "<站点目录>" --deploy   # 更新并部署
 - `.deploy-local.yml` 与 `node_modules` 会被保留，不用重新配服务器
 - 默认只构建不部署，加 `--deploy` 才发布
 
----
-
-## 部署到服务器
+### 部署配置详解
 
 站点目录里已自带 `deploy.sh` 和 `DEPLOY.md`。服务器信息默认只保存在**当前站点目录**的 `.deploy-local.yml`（权限 600，已被 `.gitignore` 忽略），不会提交，也不会随站点上传。
 
-### 首次配置（交互式，支持账号密码）
+#### 首次配置（交互式，支持账号密码）
 
 生成站点时会在终端询问「是否现在配置服务器」，选 `y` 立即进入向导；选 `N` 或非交互环境则跳过，之后首次执行 `./deploy.sh` 时会自动进入同一个向导。
 
@@ -323,7 +382,7 @@ python3 ~/.workbuddy/skills/md2website/scripts/profile.py wizard --project "$(pw
 
 向导**没有预置默认值**：主机、登录账号、SSH 端口、远程目录、站点根路径都需要手动填写；密码与 SSH 私钥至少填一项。结果写入当前站点目录的 `.deploy-local.yml`，每个站点各自一份。
 
-### 首次配置（配置档方式，多项目共用，可选）
+#### 首次配置（配置档方式，多项目共用，可选）
 
 默认不需要配置档。只有多个站点要共用同一台服务器时，才显式创建并绑定：
 
@@ -344,7 +403,7 @@ $PY $SKILL/scripts/profile.py check
 ./deploy.sh --dry-run
 ```
 
-### 正式部署
+#### 正式部署
 
 ```bash
 ./deploy.sh                 # 构建 + 上传 + 远程解压 + 校验
@@ -359,7 +418,7 @@ $PY $SKILL/scripts/profile.py check
 --profile 指定 > 站点本地 .deploy-local.yml > 项目绑定 .deploy-profile > 项目内 deploy.conf（旧版）
 ```
 
-### 登录方式
+#### 登录方式
 
 - **SSH 密钥**：`SSH_KEY` 指向私钥，首次需把公钥装到服务器
   ```bash
@@ -371,14 +430,14 @@ $PY $SKILL/scripts/profile.py check
   sudo apt install sshpass    # Debian / Ubuntu
   ```
 
-### 上传形态
+#### 上传形态
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `DIST_NAME` | `dist` | 产物文件夹名 |
 | `UPLOAD_WITH_DIR` | `false` | `true` 时远程生成 `<REMOTE_DIR>/<DIST_NAME>/`；`false` 平铺到 `<REMOTE_DIR>/index.html` |
 
-### 部署后检查 nginx（重要）
+#### 部署后检查 nginx（重要）
 
 站点默认 `cleanUrls: true`，子页面 URL 不带 `.html`。宝塔 / nginx 默认没有回退规则，会出现侧边栏子页面 404。在站点 `server` 块加：
 
@@ -390,7 +449,7 @@ location / {
 
 然后 `nginx -s reload`。
 
-### 配置字段
+#### 配置字段
 
 站点本地配置由 `profile.py wizard` 生成，路径固定为当前站点目录下的 `.deploy-local.yml`，权限 `600`。
 每个站点一份，互不影响；也支持 `profile.py set` 建配置档后 `cache` 到本地，或手工编辑该文件。
@@ -433,6 +492,19 @@ ssh_key: $HOME/.ssh/id_ed25519
 site_base: /
 ```
 
+门户子模块配置示例（部署到门户的子目录，并生成“返回门户”入口）：
+
+```yaml
+# 门户子模块：通过 SSH 密钥部署到门户的子目录
+host: baas                                      # SSH 主机名、IP 或 ~/.ssh/config 中的 Host 别名
+port: 22                                        # SSH 端口，不是网站访问端口
+user: deploy                                    # SSH 登录账号
+remote_dir: /www/wwwroot/docs.example.com/duijie-auth  # 服务器上的站点部署目录
+ssh_key: $HOME/.ssh/id_rsa                      # 本机 SSH 私钥路径
+site_base: /duijie-auth/                        # URL 基础路径，需与门户子目录一致
+portal_project: /absolute/path/to/mcp-portal    # 本机门户项目绝对路径，不会上传
+```
+
 | 字段 | yml 键 | 必填 | 默认 | 说明 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | `HOST` | `host` | 是 | — | 服务器域名或 IP | 只填主机名，不要带 `https://`、端口或路径；示例 `doc.example.com` |
@@ -442,16 +514,15 @@ site_base: /
 | `SSH_KEY` | `ssh_key` | 否 | — | SSH 私钥路径 | 无默认值；与 `PASSWORD` 至少填一项；可写 `$HOME`；文件不存在会直接报错；密码登录时留空 |
 | `PASSWORD` | `password` | 否 | — | 登录密码 | 明文保存在权限 `600` 的本地文件中；配置后本机必须安装 `sshpass`；与 `SSH_KEY` 至少填一项，两者都空会以禁止交互方式连接并失败；值内 `#` 前无空白时会保留；`#` 前有空白则按注释剥离，含「空格 + `#`」的密码请用引号包裹或改用密钥 |
 | `SSH_KEY_PASSPHRASE` | `ssh_key_passphrase` | 否 | — | 私钥口令 | 无默认值；私钥带口令时填写，同样需要本机安装 `sshpass`；与 `PASSWORD` 同时填写时以 `PASSWORD` 为准；`profile.py` 暂不接受该字段，需手工写入 `.deploy-local.yml` |
-| `SITE_BASE` | `site_base` | 是 | — | 站点根路径（记录用） | 无默认值，必须显式填写：根目录填 `/`，子目录填 `/docs/`；**不参与构建**，只在部署信息里显示；子目录部署真正生效要在生成站点时执行 `init.py --base /docs/`（`build.sh` 未暴露该参数，需按「方式三」分步执行）；只改这一项不会改变资源路径 |
+| `SITE_BASE` | `site_base` | 是 | — | 站点 URL 基础路径 | 无默认值，必须显式填写：根目录填 `/`，子目录填 `/docs/`；`deploy.sh` 构建时通过 `VP_BASE` 注入，影响站内链接和静态资源路径；也可在生成站点时执行 `init.py --base /docs/` 设置；只改这一项不会修改 Nginx 配置，修改后需重新构建 |
+| `PORTAL_PROJECT` | `portal_project` | 否 | — | 本机门户项目绝对路径 | 门户子模块使用；读取门户 `.deploy-local.yml` 中的 `portal_url` 或 `remote_dir`，用于生成“返回门户”入口并拼接站点访问地址；不会上传 |
 | `CLEAN_MODE` | `clean_mode` | 否 | `manifest` | 清理方式 | `manifest`：只删除上次部署清单内、本次已不存在的文件，不影响同目录其他程序；`all`：清空 `REMOTE_DIR` 顶层，保留 `.deploy-manifest` 与 `.user.ini`，仅限站点专属目录；`none`：不清理，旧文件会残留；其他取值等同 `none`，不会报错 |
 | `BUILD_BEFORE_DEPLOY` | `build_before_deploy` | 否 | `true` | 部署前是否构建 | `false` 等价于 `./deploy.sh --no-build`，适合 CI 已构建、只做上传的场景；命令行显式传 `--build` / `--no-build` 时以命令行为准 |
 | `REMOTE_TMP` | `remote_tmp` | 否 | `/tmp` | 远程临时目录 | 必须是绝对路径且账号有写权限；上传包 `<站点名>-<时间戳>.tar.gz` 放这里，解压后立即删除；用共享 `/tmp` 也可以 |
 | `DIST_NAME` | `dist_name` | 否 | `dist` | 产物文件夹名 | 只能是单级目录名，允许字母、数字、`.`、`_`、`-`，禁止 `/`、`.`、`..`；`UPLOAD_WITH_DIR=true` 时作为远程子目录名 |
 | `UPLOAD_WITH_DIR` | `upload_with_dir` | 否 | `false` | 是否带文件夹上传 | `true`：远程为 `<REMOTE_DIR>/<DIST_NAME>/index.html`，nginx `root` 需指向该子目录；`false`：平铺到 `<REMOTE_DIR>/index.html` |
 
----
-
-## 安全说明
+### 安全说明
 
 - **凭据存储**：配置档（`~/.workbuddy/deploy-profiles`，权限 `700`）与站点本地 `.deploy-local.yml`（权限 `600`）均含明文服务器信息，且已被 `.gitignore` 忽略，不会被上传或提交。
 - **登录方式**：优先使用 SSH 密钥；只有必须用密码时才配置 `PASSWORD`。脚本通过 `sshpass -e` 从环境变量读取密码，不会把明文密码放进进程命令行。
@@ -464,9 +535,7 @@ site_base: /
 - **清理护栏**：`REMOTE_DIR` 必须为绝对路径、至少两级目录，且不能是 `/`、`$HOME`、`/root`、`/etc`、`/var`、`/www`、`/www/wwwroot`、`/var/www`、`/usr/local`、`/tmp`、`/opt` 等系统或多站点容器目录，避免 `CLEAN_MODE=all` 误删。
 - **删除护栏**：`build.sh` 拒绝把 `/`、`$HOME`、源目录本身或其父目录作为输出目录。
 
----
-
-## 脚本职责
+### 脚本职责
 
 | 脚本 | 作用 | 是否改文件 |
 | --- | --- | --- |
@@ -481,9 +550,7 @@ site_base: /
 | `assets/build.sh` | 一键入口：扫描 → 生成 → 装依赖 → 构建 → 预览 | 写输出目录 |
 | `assets/deploy.sh` | 构建 + 打包上传 + 远程解压 + 校验 | 写本地临时包 |
 
----
-
-## 生成的站点结构
+### 生成的站点结构
 
 ```
 <输出目录>/
@@ -504,9 +571,7 @@ site_base: /
 └── .gitignore                   # 已忽略部署配置与构建产物
 ```
 
----
-
-## 常见问题
+### 常见问题
 
 | 现象 | 原因 | 解决 |
 | --- | --- | --- |
@@ -520,8 +585,6 @@ site_base: /
 | 双击 `index.html` 内链打不开 | 静态文件需 HTTP 服务 | 用 `npm run preview` 或部署后访问 |
 
 更多排错与执行规范见 `SKILL.md`；三步上手版见 `SETUP.md`；English: `README.en.md`。
-
----
 
 ## 许可证
 
