@@ -152,6 +152,17 @@ Your source Markdown directory is **never modified** — everything is written t
 - Click-to-zoom images
 - Prev / next page navigation
 
+### Single-file notes
+
+`init.py` only accepts a **directory** as its source — never a single `.md` file:
+
+- Passing a file path prints `源目录不存在: …/x.md` and exits with code 1; it does not fall back to the parent folder
+- With only one Markdown file, create a folder for it first (e.g. `notes/notes.md`) and pass `notes/` as the source
+- A root-level file named `README.md` / `index.md` is skipped; if it is the only file, generation stops with `没有可用的文档条目` and exit code 1 — rename it or move it into a subfolder
+- Placement decides the URL: a file directly in the source root becomes `/<slug>` (no trailing slash, slug from the filename); inside a subfolder it becomes `/<slug>/` (slug from the folder name, filename no longer matters)
+- A single-document site automatically enters single-doc mode: the left sidebar shows the file's h2/h3 outline, the right outline is disabled, and the home page shows "1 chapter"; build and deploy behave exactly like a multi-chapter site
+- Mounting as a portal submodule has no special handling: the subdirectory name comes from `package.json`'s `name` (or the site directory name), independent of the Markdown filename
+
 ## Deployment
 
 Server credentials are stored **per site** in `.deploy-local.yml` inside the generated site directory (mode 600, ignored by `.gitignore`). Nothing sensitive is committed or uploaded.

@@ -63,7 +63,7 @@ python3 $SKILL_DIR/scripts/_env.py
 - `scripts/init.py` — 扫描源目录，生成完整文档站项目，并自动修复语法冲突、改写跨章节死链、为合集/多级目录生成分组侧边栏；`--portal` 生成门户站点（聚合子模块）
 - `scripts/scan.py` — 扫描语法冲突与缺失图片
 - `scripts/fix.py` — 修复 `<img>` 标签与错误图片路径
-- `scripts/profile.py` — 部署配置档管理（set/bind/cache/list/show/check/wizard/submodule）
+- `scripts/profile.py` — 部署配置档管理（set/bind/cache/list/show/check/wizard/submodule/template）
 - `scripts/sites.py` — 查找已生成的站点（list/select，支持 JSON 输出）
 - `scripts/update.py` — 更新已有站点（重建 + 构建，可选部署）
 - `assets/deploy.sh` — 一键部署脚本（init 时复制到项目里）
@@ -177,6 +177,13 @@ cd "<输出目录>"
 python3 "$SKILL_DIR"/scripts/profile.py wizard --project "$(pwd)"
 ```
 
+需要先看结构再填写时，用 `template` 生成带注释的骨架（默认只打印到终端，`--out` 写文件，`--project` 预填已推导项）：
+
+```bash
+python3 "$SKILL_DIR"/scripts/profile.py template --project "$(pwd)"
+python3 "$SKILL_DIR"/scripts/profile.py template --out .deploy-local.yml   # 已存在需 --force
+```
+
 只有多个站点确实要共用同一台服务器时，才显式使用配置档（可选）：
 
 ```bash
@@ -279,6 +286,17 @@ python3 "$SKILL_DIR"/scripts/profile.py bind --project "<输出目录>" --name <
 - 根目录散装的 md → 平铺成单页（`readme/index` 跳过）
 - 站点**只有一个文档**时，左侧侧边栏直接显示该文档的章节（h2/h3 标题，h2 有 h3 子标题时作分组、无子标题时作链接），右侧「本页章节」outline 关闭；多文档时保持「左侧文件名、右侧章节」
 - URL slug 保留中文，只清洗空格和特殊字符
+
+### 单文件限制（单篇 md / 单 md 挂子模块）
+
+`init.py` 的源参数**只接受目录，不接受单个 `.md` 文件**：
+
+- 传文件路径会打印 `源目录不存在: …/x.md` 并以退出码 1 结束，不会自动回退到父目录
+- 只有一篇 md 时，先给它建一个目录（如 `笔记/笔记.md`），再把 `笔记/` 作为源传入
+- 根级名为 `README.md` / `index.md` 的文件会被跳过；目录里只有这类文件时直接报 `没有可用的文档条目` 并退出 1，需改名或放进子目录
+- 摆放位置决定 URL：md 直接放源根目录 → `/<slug>`（无尾斜杠，slug 取文件名）；放进子目录 → `/<slug>/`（slug 取目录名，文件名不再参与 URL）
+- 单文档站点自动进入单文档模式：左侧侧边栏变成该文件的 h2/h3 大纲、右侧 outline 关闭、首页标注「共 1 个章节」；构建与部署流程与多章节站点完全相同
+- 挂门户子模块时没有特殊处理，子目录名取 `package.json` 的 `name`（缺省回落到站点目录名），与 md 文件名无关
 
 ## 更新已有站点（触发词：更新站点 / 重建站点 / 同步站点 / 重新发布）
 
