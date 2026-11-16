@@ -15,7 +15,7 @@
 在 Trae CN、Codex、Claude Code 等桌面 Agent 的对话框里，直接发仓库地址并说明意图即可：
 
 ```
-安装这个技能：https://github.com/binny2026/md2website
+安装这个技能：https://github.com/cotton1216/md2website
 ```
 
 Agent 会克隆仓库并执行 `./install.sh`。非交互环境下脚本默认装到**所有已检测到的 Agent 技能目录**，因此发起安装的 Agent 也能直接加载。
@@ -25,7 +25,7 @@ Agent 会克隆仓库并执行 `./install.sh`。非交互环境下脚本默认�
 也可以直接给它一条完整命令：
 
 ```bash
-git clone git@github.com:binny2026/md2website.git ~/md2website && cd ~/md2website && ./install.sh --all
+git clone git@github.com:cotton1216/md2website.git ~/md2website && cd ~/md2website && ./install.sh --all
 ```
 
 ## 功能特性
@@ -71,7 +71,7 @@ git clone git@github.com:binny2026/md2website.git ~/md2website && cd ~/md2websit
 ### 方式一：从仓库安装
 
 ```bash
-git clone git@github.com:binny2026/md2website.git md2website
+git clone git@github.com:cotton1216/md2website.git md2website
 cd md2website
 ./install.sh
 ```

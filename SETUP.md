@@ -74,7 +74,7 @@ cp ~/.workbuddy/skills/md2website/assets/build.sh ~/你的md目录/
 也可以在 Trae CN / Codex / Claude Code 等桌面 Agent 对话框里直接发仓库地址：
 
 ```
-安装这个技能：https://github.com/binny2026/md2website
+安装这个技能：https://github.com/cotton1216/md2website
 ```
 
 Agent 会克隆并执行安装脚本（非交互环境自动装到所有已检测到的 Agent 目录），装完新开会话即可。

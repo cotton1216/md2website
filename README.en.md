@@ -13,7 +13,7 @@ Turn a Markdown documentation project (multi-chapter tutorials, notes, course ma
 In Trae CN, Codex, Claude Code or any similar desktop agent, just send the repository URL:
 
 ```
-Install this skill: https://github.com/binny2026/md2website
+Install this skill: https://github.com/cotton1216/md2website
 ```
 
 The agent clones the repo and runs `./install.sh`. Without a TTY the script installs into **every detected agent directory**, so the calling agent can load it too.
@@ -23,7 +23,7 @@ Start a new session (or refresh the skill list) after installation.
 Or hand it the full command:
 
 ```bash
-git clone git@github.com:binny2026/md2website.git ~/md2website && cd ~/md2website && ./install.sh --all
+git clone git@github.com:cotton1216/md2website.git ~/md2website && cd ~/md2website && ./install.sh --all
 ```
 
 ## Why a dedicated tool
