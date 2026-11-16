@@ -461,6 +461,7 @@ THEME_INDEX = r'''import { h, onMounted, watch, nextTick } from 'vue'
 import DefaultTheme from 'vitepress/theme'
 import { useRoute } from 'vitepress'
 import PortalNav from './PortalNav.vue'
+import SidebarToggle from './SidebarToggle.vue'
 import { createModuleCatalog, moduleCatalogKey } from './moduleCatalog.mjs'
 import mermaid from 'mermaid'
 import './custom.css'
@@ -517,7 +518,7 @@ function installZoom() {
 export default {
   extends: DefaultTheme,
   Layout: () => h(DefaultTheme.Layout, null, {
-    'nav-bar-content-after': () => h(PortalNav),
+    'nav-bar-content-after': () => [h(SidebarToggle), h(PortalNav)],
     'nav-screen-content-after': () => h(PortalNav, { mobile: true })
   }),
   enhanceApp({ app }) {
@@ -531,6 +532,72 @@ export default {
   }
 }
 '''
+
+SIDEBAR_TOGGLE = r'''<script setup>
+import { onMounted, ref } from 'vue'
+
+// 目录收起状态：切换 <html> 上的 sidebar-collapsed 类，配合 custom.css 隐藏左侧目录
+const STORAGE_KEY = 'md2website.sidebar-collapsed'
+const collapsed = ref(false)
+
+function apply(value) {
+  document.documentElement.classList.toggle('sidebar-collapsed', value)
+  try {
+    localStorage.setItem(STORAGE_KEY, value ? '1' : '0')
+  } catch (e) {
+    // 隐私模式等场景 localStorage 可能不可用，忽略即可
+  }
+}
+
+function toggle() {
+  collapsed.value = !collapsed.value
+  apply(collapsed.value)
+}
+
+onMounted(() => {
+  let saved = false
+  try {
+    saved = localStorage.getItem(STORAGE_KEY) === '1'
+  } catch (e) {
+    saved = false
+  }
+  collapsed.value = saved
+  apply(saved)
+})
+</script>
+
+<template>
+  <button
+    type="button"
+    class="sidebar-toggle"
+    :class="{ 'is-collapsed': collapsed }"
+    :title="collapsed ? '展开目录' : '收起目录'"
+    :aria-label="collapsed ? '展开目录' : '收起目录'"
+    @click="toggle"
+  >
+    <svg class="sidebar-toggle-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        v-if="collapsed"
+        d="M13 5l7 7-7 7M6 5l7 7-7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        v-else
+        d="M11 5l-7 7 7 7M18 5l-7 7 7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <span class="sidebar-toggle-text">{{ collapsed ? '展开目录' : '收起目录' }}</span>
+  </button>
+</template>'''
 
 # 门户主题：注册 ModuleGrid（首页卡片）+ PortalNav（顶部动态下拉导航）
 PORTAL_THEME_INDEX = '''import { h, onMounted, watch, nextTick } from 'vue'
@@ -1207,6 +1274,54 @@ body {
   transition: transform 0.18s ease;
 }
 .img-zoom-mask.open img { transform: scale(1); }
+/* ============ 目录收起开关 ============ */
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-right: 2px;
+  padding: 5px 10px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vp-c-text-1);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.sidebar-toggle:hover {
+  color: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+}
+.sidebar-toggle-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* 仅在桌面（侧边栏常驻）时显示收起按钮 */
+@media (min-width: 960px) {
+  .VPNavBar.has-sidebar .sidebar-toggle { display: inline-flex; }
+}
+
+/* 收起后：隐藏左侧目录，正文与顶部/局部导航占满整行 */
+@media (min-width: 960px) {
+  html.sidebar-collapsed .VPSidebar { display: none !important; }
+  html.sidebar-collapsed .VPContent.has-sidebar { padding-left: 0 !important; padding-right: 0 !important; }
+  html.sidebar-collapsed .VPLocalNav.has-sidebar { padding-left: 0 !important; }
+  html.sidebar-collapsed .VPLocalNavOutlineDropdown .items { left: 32px !important; }
+  html.sidebar-collapsed .VPNavBar.has-sidebar .wrapper { padding: 0 32px !important; }
+  html.sidebar-collapsed .VPNavBar.has-sidebar .container { max-width: calc(var(--vp-layout-max-width) - 64px) !important; }
+  html.sidebar-collapsed .VPNavBar.has-sidebar .content { padding-left: 0 !important; padding-right: 0 !important; }
+  html.sidebar-collapsed .VPNavBar.has-sidebar .container > .title {
+    position: static !important;
+    width: auto !important;
+    padding: 0 !important;
+  }
+  html.sidebar-collapsed .VPNavBarTitle.has-sidebar .title { border-bottom-color: transparent !important; }
+}
 '''
 
 PORTAL_CSS = '''
@@ -1905,6 +2020,7 @@ def main():
         'SIDEBAR_ITEMS': sidebar_items,
     }))
     write(os.path.join(docs, '.vitepress', 'theme', 'index.mjs'), THEME_INDEX)
+    write(os.path.join(docs, '.vitepress', 'theme', 'SidebarToggle.vue'), SIDEBAR_TOGGLE)
     write(os.path.join(docs, '.vitepress', 'theme', 'PortalNav.vue'), PORTAL_NAV)
     write(os.path.join(docs, '.vitepress', 'theme', 'moduleCatalog.mjs'), PORTAL_MODULE_CATALOG)
     write(os.path.join(docs, '.vitepress', 'theme', 'custom.css'), CUSTOM_CSS + PORTAL_NAV_CSS)
