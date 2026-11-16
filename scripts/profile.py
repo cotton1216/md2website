@@ -8,6 +8,9 @@
     python3 profile.py check  --name <项目名>        # 检查缺项，退出码 2 表示缺配置
     python3 profile.py set    --name <项目名> KEY=VALUE [KEY=VALUE ...]
     python3 profile.py list
+    python3 profile.py template [--project <站点目录>] [--out <路径>]   # 带注释的配置骨架
+    python3 profile.py wizard  --project <站点目录>
+    python3 profile.py submodule --project <站点目录>
 
 配置目录:
     ~/.workbuddy/deploy-profiles/<项目名>.conf
@@ -705,6 +708,82 @@ def cmd_submodule(args):
     return 0
 
 
+TEMPLATE_HEADER = [
+    '# ============================================================',
+    '# md2website 站点部署配置（模板）',
+    '# 填写后保存为站点目录下的 .deploy-local.yml（权限 600，已在 .gitignore 中）',
+    '# 解析规则：只支持单行 key: value；字段名大小写等价；# 前有空白才算注释',
+    '# 必填：HOST / PORT / USER / REMOTE_DIR / SITE_BASE',
+    '# 登录方式：PASSWORD 与 SSH_KEY 至少填一项',
+    '# 可选字段留空即取默认值：CLEAN_MODE=manifest、BUILD_BEFORE_DEPLOY=true、',
+    '#   REMOTE_TMP=/tmp、DIST_NAME=dist、UPLOAD_WITH_DIR=false',
+    '# 填写后可用 ./deploy.sh --dry-run 校验配置与连通性',
+    '# ============================================================',
+]
+
+TEMPLATE_NOTES = {
+    'PORT': '通常为 22，不是网站访问端口',
+    'SSH_KEY': '可写 $HOME/.ssh/id_rsa',
+    'PASSWORD': '明文保存在本地，需本机安装 sshpass',
+    'SITE_BASE': '根目录填 /，子目录填 /docs/；改后需重新构建',
+    'PORTAL_PROJECT': '门户子模块填写，不会上传服务器',
+}
+
+
+def render_template(filled=None):
+    """生成带注释的 .deploy-local.yml 骨架，filled 中已有的值直接预填。"""
+    filled = filled or {}
+    lines = list(TEMPLATE_HEADER) + ['']
+    for key, desc, req in FIELDS:
+        yml_key = FIELD_YML.get(key, key.lower())
+        tag = '必填' if req else '可选'
+        tip = TEMPLATE_NOTES.get(key, '')
+        lines.append(f'# {desc}（{tag}）' + (f'；{tip}' if tip else ''))
+        val = filled.get(key, '')
+        lines.append(f'{yml_key}: {val}' if val else f'{yml_key}: ""')
+        lines.append('')
+    return '\n'.join(lines).rstrip() + '\n'
+
+
+def cmd_template(args):
+    """输出带注释的配置模板：默认打印到终端，--out 写文件，--project 预填已推导项。"""
+    filled = {}
+    if args.project:
+        project = os.path.abspath(os.path.expanduser(args.project))
+        if not os.path.isdir(project):
+            print(f'目录不存在: {project}', file=sys.stderr)
+            return 1
+        filled = read_deploy_config(project)
+
+    text = render_template(filled)
+    miss = missing_of(filled)
+
+    if not args.out:
+        sys.stdout.write(text)
+        if args.project and miss:
+            print(f'提示：仍缺必填项 {", ".join(miss)}，补全后再保存', file=sys.stderr)
+        return 0
+
+    out = os.path.abspath(os.path.expanduser(args.out))
+    if os.path.exists(out) and not args.force:
+        print(f'目标已存在，未覆盖: {out}\n确认覆盖请加 --force', file=sys.stderr)
+        return 1
+    parent = os.path.dirname(out)
+    if not os.path.isdir(parent):
+        print(f'目录不存在: {parent}', file=sys.stderr)
+        return 1
+    with open(out, 'w', encoding='utf-8') as f:
+        f.write(text)
+    try:
+        os.chmod(out, 0o600)
+    except OSError:
+        pass
+    print(f'已写入: {out}')
+    if miss:
+        print('待补全必填项: ' + ', '.join(miss))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description='部署配置档管理')
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -722,6 +801,10 @@ def main():
     p.add_argument('--name')
     p = sub.add_parser('wizard')
     p.add_argument('--project', required=True)
+    p = sub.add_parser('template', help='生成带注释的部署配置模板（默认只打印）')
+    p.add_argument('--project', help='站点目录，预填已推导项')
+    p.add_argument('--out', help='写入指定文件（默认打印到终端）')
+    p.add_argument('--force', action='store_true', help='--out 目标已存在时覆盖')
     p = sub.add_parser('submodule')
     p.add_argument('--project', required=True)
     p = sub.add_parser('hosts', help='列出全局主机/门户记录')
@@ -739,7 +822,7 @@ def main():
     return {
         'path': cmd_path, 'show': cmd_show, 'check': cmd_check,
         'set': cmd_set, 'list': cmd_list, 'bind': cmd_bind, 'cache': cmd_cache,
-        'wizard': cmd_wizard, 'submodule': cmd_submodule,
+        'wizard': cmd_wizard, 'submodule': cmd_submodule, 'template': cmd_template,
         'hosts': (lambda a: cmd_hosts_rm(a) if a.rm else cmd_hosts_list(a)),
         'choose': cmd_choose,
     }[args.cmd](args)

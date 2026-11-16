@@ -455,6 +455,16 @@ location / {
 每个站点一份，互不影响；也支持 `profile.py set` 建配置档后 `cache` 到本地，或手工编辑该文件。
 向导与配置档都**不预置默认值**，必填项必须显式提供。
 
+不想逐项手写时，先生成带注释的骨架再补全（默认只打印到终端，不落盘）：
+
+```bash
+python3 "$SKILL_DIR"/scripts/profile.py template                        # 打印骨架
+python3 "$SKILL_DIR"/scripts/profile.py template --out .deploy-local.yml  # 写入文件（已存在需 --force）
+python3 "$SKILL_DIR"/scripts/profile.py template --project "$(pwd)"     # 预填本机已推导的配置项
+```
+
+`--project` 会读取站点已有的 `.deploy-local.yml` 或绑定配置档，把 `host`、`remote_dir`、`site_base`、`portal_project` 等已知项填好，只留下待补的空位。写文件时权限自动设为 `600`。
+
 格式规则（解析器是脚本内置的简易 YAML，不是真正的 YAML 库）：
 
 - 字段名大小写等价：`HOST` 与 `host` 都可以，`REMOTE_DIR` 与 `remote_dir` 都可以
@@ -546,7 +556,7 @@ portal_project: /absolute/path/to/mcp-portal    # 本机门户项目绝对路径
 | `scripts/init.py` | 生成完整文档站项目（含死链改写、多级目录、主题） | 只写新目录，`--force` 时原地重建 |
 | `scripts/sites.py` | 查找已生成的站点（`list/select`） | 只读 |
 | `scripts/update.py` | 更新已有站点：重建 + 构建，可选部署 | 写站点目录，备份到 `.backup/` |
-| `scripts/profile.py` | 部署配置档管理（`path/show/check/set/list/bind/cache/wizard`） | 写 `~/.workbuddy/deploy-profiles/` 或站点 `.deploy-local.yml` |
+| `scripts/profile.py` | 部署配置档管理（`path/show/check/set/list/bind/cache/wizard/submodule/template`） | 写 `~/.workbuddy/deploy-profiles/` 或站点 `.deploy-local.yml` |
 | `assets/build.sh` | 一键入口：扫描 → 生成 → 装依赖 → 构建 → 预览 | 写输出目录 |
 | `assets/deploy.sh` | 构建 + 打包上传 + 远程解压 + 校验 | 写本地临时包 |
 
