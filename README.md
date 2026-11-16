@@ -532,6 +532,30 @@ portal_project: /absolute/path/to/mcp-portal    # 本机门户项目绝对路径
 | `DIST_NAME` | `dist_name` | 否 | `dist` | 产物文件夹名 | 只能是单级目录名，允许字母、数字、`.`、`_`、`-`，禁止 `/`、`.`、`..`；`UPLOAD_WITH_DIR=true` 时作为远程子目录名 |
 | `UPLOAD_WITH_DIR` | `upload_with_dir` | 否 | `false` | 是否带文件夹上传 | `true`：远程为 `<REMOTE_DIR>/<DIST_NAME>/index.html`，nginx `root` 需指向该子目录；`false`：平铺到 `<REMOTE_DIR>/index.html` |
 
+#### 门户 / 子模块 / 独立站点怎么选
+
+三类站点的差别只在生成方式与 `.deploy-local.yml` 里的两三个字段，部署流程完全相同：
+
+| 项目 | 门户站点 | 子模块站点 | 独立站点 |
+| --- | --- | --- | --- |
+| 生成命令 | `init.py --portal`（`build.sh` 不支持） | `build.sh` 或 `init.py` | `build.sh` 或 `init.py` |
+| `.md2website.json` | 带 `"role": "portal"` | 无 `role` | 无 `role` |
+| `REMOTE_DIR` | 门户根目录，如 `/www/wwwroot/docs.example.com` | 门户目录 + 子目录，如 `/www/wwwroot/docs.example.com/duijie-auth` | 站点自己的目录 |
+| `SITE_BASE` | `/` | `/子目录/`，与门户子目录同名 | `/`（独立子目录部署则填 `/子目录/`） |
+| `PORTAL_URL` | 自己的对外地址，用于生成 `SITE_URL` | 门户完整地址，用于「返回门户」入口 | 不填 |
+| `PORTAL_PROJECT` | 不填 | 本机门户项目绝对路径 | 不填 |
+| 部署后的额外动作 | 跳过自动重建门户 | 部署成功后自动执行门户的 `./deploy.sh` | 无 |
+
+**不需要子模块时**，只要不做这三件事：
+
+| 做法 | 说明 |
+| --- | --- |
+| 不跑 `init.py --portal` | 用 `build.sh` 或普通 `init.py` 生成站点，就不会有 `role: portal` |
+| 只填五项必填 | `host`、`port`、`user`、`remote_dir`、`site_base`，`site_base` 填 `/`；`portal_url` 与 `portal_project` 留空 |
+| 向导里门户地址直接回车 | 不填门户地址就不会往 `~/.md2website/hosts.json` 记录门户，也不生成「返回门户」入口 |
+
+`remote_dir` 里带子目录层级但没配 `portal_project` 时，`deploy.sh` 只打一条告警，不会中断部署。
+
 ### 安全说明
 
 - **凭据存储**：配置档（`~/.workbuddy/deploy-profiles`，权限 `700`）与站点本地 `.deploy-local.yml`（权限 `600`）均含明文服务器信息，且已被 `.gitignore` 忽略，不会被上传或提交。
