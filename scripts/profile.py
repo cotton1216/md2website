@@ -39,6 +39,7 @@ FIELDS = [
     ('PASSWORD', '登录密码（留空则用 SSH 密钥）', False),
     ('SITE_BASE', '站点根路径（/ 或 /子目录/）', True),
     ('CLEAN_MODE', '清理方式 manifest|none|all', False),
+    ('TRANSFER_MODE', '传输方式 full|rsync', False),
     ('BUILD_BEFORE_DEPLOY', '部署前是否构建 true|false', False),
     ('REMOTE_TMP', '远程临时目录', False),
     ('DIST_NAME', '产物文件夹名（上传时）', False),
@@ -346,7 +347,7 @@ def cmd_bind(args):
 FIELD_YML = {
     'HOST': 'host', 'PORT': 'port', 'USER': 'user', 'PASSWORD': 'password',
     'REMOTE_DIR': 'remote_dir', 'SSH_KEY': 'ssh_key', 'SITE_BASE': 'site_base',
-    'CLEAN_MODE': 'clean_mode', 'BUILD_BEFORE_DEPLOY': 'build_before_deploy',
+    'CLEAN_MODE': 'clean_mode', 'TRANSFER_MODE': 'transfer_mode', 'BUILD_BEFORE_DEPLOY': 'build_before_deploy',
     'REMOTE_TMP': 'remote_tmp', 'DIST_NAME': 'dist_name', 'UPLOAD_WITH_DIR': 'upload_with_dir',
     'PORTAL_PROJECT': 'portal_project', 'PORTAL_URL': 'portal_url',
 }
@@ -715,7 +716,7 @@ TEMPLATE_HEADER = [
     '# 解析规则：只支持单行 key: value；字段名大小写等价；# 前有空白才算注释',
     '# 必填：HOST / PORT / USER / REMOTE_DIR / SITE_BASE',
     '# 登录方式：PASSWORD 与 SSH_KEY 至少填一项',
-    '# 可选字段留空即取默认值：CLEAN_MODE=manifest、BUILD_BEFORE_DEPLOY=true、',
+    '# 可选字段留空即取默认值：CLEAN_MODE=manifest、TRANSFER_MODE=full、BUILD_BEFORE_DEPLOY=true、',
     '#   REMOTE_TMP=/tmp、DIST_NAME=dist、UPLOAD_WITH_DIR=false',
     '# 填写后可用 ./deploy.sh --dry-run 校验配置与连通性',
     '# ============================================================',
@@ -726,6 +727,7 @@ TEMPLATE_NOTES = {
     'SSH_KEY': '可写 $HOME/.ssh/id_rsa',
     'PASSWORD': '明文保存在本地，需本机安装 sshpass',
     'SITE_BASE': '根目录填 /，子目录填 /docs/；改后需重新构建',
+    'TRANSFER_MODE': 'full 整包覆盖；rsync 增量传输（需本机与服务器都装 rsync）',
     'PORTAL_PROJECT': '门户子模块填写，不会上传服务器',
 }
 

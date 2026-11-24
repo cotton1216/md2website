@@ -438,6 +438,7 @@ $PY $SKILL/scripts/profile.py check
 | --- | --- | --- |
 | `DIST_NAME` | `dist` | 产物文件夹名 |
 | `UPLOAD_WITH_DIR` | `false` | `true` 时远程生成 `<REMOTE_DIR>/<DIST_NAME>/`；`false` 平铺到 `<REMOTE_DIR>/index.html` |
+| `TRANSFER_MODE` | `full` | `full`：整包覆盖；`rsync`：增量传输，只传变化文件 |
 
 #### 部署后检查 nginx（重要）
 
@@ -529,6 +530,7 @@ portal_project: /absolute/path/to/mcp-portal    # 本机门户项目绝对路径
 | `SITE_BASE` | `site_base` | 是 | — | 站点 URL 基础路径 | 无默认值，必须显式填写：根目录填 `/`，子目录填 `/docs/`；`deploy.sh` 构建时通过 `VP_BASE` 注入，影响站内链接和静态资源路径；也可在生成站点时执行 `init.py --base /docs/` 设置；只改这一项不会修改 Nginx 配置，修改后需重新构建 |
 | `PORTAL_PROJECT` | `portal_project` | 否 | — | 本机门户项目绝对路径 | 门户子模块使用；读取门户 `.deploy-local.yml` 中的 `portal_url` 或 `remote_dir`，用于生成“返回门户”入口并拼接站点访问地址；不会上传 |
 | `CLEAN_MODE` | `clean_mode` | 否 | `manifest` | 清理方式 | `manifest`：只删除上次部署清单内、本次已不存在的文件，不影响同目录其他程序；`all`：清空 `REMOTE_DIR` 顶层，保留 `.deploy-manifest` 与 `.user.ini`，仅限站点专属目录；`none`：不清理，旧文件会残留；其他取值等同 `none`，不会报错 |
+| `TRANSFER_MODE` | `transfer_mode` | 否 | `full` | 传输方式 | `full`：整包打包上传后远程解压覆盖（原方式）；`rsync`：增量传输，只上传有变化的文件，并用 `--delete` 清掉本地已删、远端残留的文件（语义等同 `CLEAN_MODE=all`，忽略 manifest）；需本机与服务器都装 rsync |
 | `BUILD_BEFORE_DEPLOY` | `build_before_deploy` | 否 | `true` | 部署前是否构建 | `false` 等价于 `./deploy.sh --no-build`，适合 CI 已构建、只做上传的场景；命令行显式传 `--build` / `--no-build` 时以命令行为准 |
 | `REMOTE_TMP` | `remote_tmp` | 否 | `/tmp` | 远程临时目录 | 必须是绝对路径且账号有写权限；上传包 `<站点名>-<时间戳>.tar.gz` 放这里，解压后立即删除；用共享 `/tmp` 也可以 |
 | `DIST_NAME` | `dist_name` | 否 | `dist` | 产物文件夹名 | 只能是单级目录名，允许字母、数字、`.`、`_`、`-`，禁止 `/`、`.`、`..`；`UPLOAD_WITH_DIR=true` 时作为远程子目录名 |

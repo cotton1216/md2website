@@ -158,7 +158,7 @@ load_conf() {
     val="${line#*=}"
     key="$(printf '%s' "$key" | tr -d '[:space:]')"
     case "$key" in
-      HOST|PORT|USER|PASSWORD|REMOTE_DIR|SSH_KEY|SSH_KEY_PASSPHRASE|SITE_BASE|CLEAN_MODE|BUILD_BEFORE_DEPLOY|REMOTE_TMP|DIST_NAME|UPLOAD_WITH_DIR|PORTAL_PROJECT|PORTAL_URL) ;;
+      HOST|PORT|USER|PASSWORD|REMOTE_DIR|SSH_KEY|SSH_KEY_PASSPHRASE|SITE_BASE|CLEAN_MODE|TRANSFER_MODE|BUILD_BEFORE_DEPLOY|REMOTE_TMP|DIST_NAME|UPLOAD_WITH_DIR|PORTAL_PROJECT|PORTAL_URL) ;;
       *) continue ;;
     esac
     # 去掉行尾注释（# 前需有空白），再处理引号
@@ -201,6 +201,7 @@ load_yml() {
       ssh_key_passphrase|SSH_KEY_PASSPHRASE) key="SSH_KEY_PASSPHRASE" ;;
       site_base|SITE_BASE) key="SITE_BASE" ;;
       clean_mode|CLEAN_MODE) key="CLEAN_MODE" ;;
+      transfer_mode|TRANSFER_MODE) key="TRANSFER_MODE" ;;
       build_before_deploy|BUILD_BEFORE_DEPLOY) key="BUILD_BEFORE_DEPLOY" ;;
       remote_tmp|REMOTE_TMP) key="REMOTE_TMP" ;;
       dist_name|DIST_NAME) key="DIST_NAME" ;;
@@ -228,6 +229,11 @@ esac
 [ "$REMOTE_DIR" = "/" ] || REMOTE_DIR="${REMOTE_DIR%/}"
 REMOTE_TMP="${REMOTE_TMP:-/tmp}"
 CLEAN_MODE="${CLEAN_MODE:-manifest}"
+TRANSFER_MODE="${TRANSFER_MODE:-full}"
+case "$TRANSFER_MODE" in
+  full|rsync) ;;
+  *) die "TRANSFER_MODE 只能是 full（整包覆盖）或 rsync（增量传输），当前为 '$TRANSFER_MODE'" ;;
+esac
 [ -z "$DO_BUILD" ] && DO_BUILD="${BUILD_BEFORE_DEPLOY:-true}"
 DIST_NAME="${DIST_NAME:-dist}"
 UPLOAD_WITH_DIR="${UPLOAD_WITH_DIR:-false}"
@@ -274,6 +280,7 @@ printf '  %-10s %s@%s:%s\n' "服务器" "$USER" "$HOST" "$PORT"
 printf '  %-10s %s\n' "目录" "$REMOTE_DIR"
 printf '  %-10s %s\n' "站点根路径" "$SITE_BASE"
 printf '  %-10s %s\n' "清理方式" "$CLEAN_MODE"
+printf '  %-10s %s\n' "传输方式" "$TRANSFER_MODE"
 printf '  %-10s %s\n' "配置来源" "$CONF_SOURCE"
 printf '%s╰──────────────────────────────────────────────╯%s\n\n' "$C_INFO" "$C_RESET"
 
@@ -417,6 +424,32 @@ if [ "$DRY_RUN" = "true" ]; then
   exit 0
 fi
 
+if [ "$TRANSFER_MODE" = "rsync" ]; then
+  info "增量传输（rsync，只上传变化文件）"
+  command -v rsync >/dev/null 2>&1 || die "TRANSFER_MODE=rsync 需要本机安装 rsync。安装：brew install rsync（macOS）或 apt/yum install rsync（Linux）"
+  STAMP="$(date +%Y%m%d-%H%M%S)"
+
+  # 复用 SSH 选项构造 rsync 的远程 shell（-e），端口/密钥/严格主机检查保持一致
+  RSYNC_RSH="ssh"
+  for _o in "${SSH_OPTS[@]}"; do
+    RSYNC_RSH="$RSYNC_RSH $(printf '%q' "$_o")"
+  done
+
+  # --delete：删除「本地已不存在、远端仍残留」的文件，清理语义等于 CLEAN_MODE=all（忽略 manifest）
+  # --exclude：保护宝塔 .user.ini，避免被 --delete 清掉
+  if [ "$UPLOAD_WITH_DIR" = "true" ]; then
+    RSYNC_DST="$USER@$HOST:$REMOTE_DIR/$DIST_NAME/"
+  else
+    RSYNC_DST="$USER@$HOST:$REMOTE_DIR/"
+  fi
+
+  if [ "$USE_SSHPASS" = "true" ]; then
+    SSHPASS="$SSHPASS_PW" sshpass -e rsync -az --delete -e "$RSYNC_RSH" --exclude='.user.ini' "$DIST_DIR/" "$RSYNC_DST" || die "rsync 上传失败"
+  else
+    rsync -az --delete -e "$RSYNC_RSH" --exclude='.user.ini' "$DIST_DIR/" "$RSYNC_DST" || die "rsync 上传失败"
+  fi
+  ok "rsync 上传完成"
+else
 # ---------- 本地打包 ----------
 STAMP="$(date +%Y%m%d-%H%M%S)"
 SITE_NAME="$(grep -o '"name": *"[^"]*"' "$SCRIPT_DIR/package.json" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
@@ -494,6 +527,7 @@ EOF
 
 ssh_run "$REMOTE_SCRIPT" | grep -q "remote-deploy-done" || die "远程解压失败"
 ok "远程部署完成"
+fi
 
 # ---------- 结果校验 ----------
 info "校验线上文件"
