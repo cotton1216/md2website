@@ -22,6 +22,7 @@ import shutil
 import sys
 
 IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'}
+VIDEO_EXTS = {'.mp4', '.webm', '.mov', '.m4v', '.mkv'}
 SKIP_DIRS = {'node_modules', '.git', '.vitepress', 'dist', 'build', '.cache', '__pycache__'}
 SKIP_FILES = {'.DS_Store'}
 
@@ -226,6 +227,78 @@ def slugify(name, used):
         n += 1
     used.add(s)
     return s
+
+
+GROUP_FILE = 'groups.json'
+
+
+def read_groups(src):
+    """读取源目录下的 groups.json 分组配置（可选，用于按学段/主题分组侧边栏）。
+
+    格式:
+      { "groups": [ {"name": "初中", "chapters": ["冲刺有回音", ...]}, ... ] }
+
+    返回 [{"name", "chapters"}]；文件不存在或解析失败返回 None。
+    """
+    path = os.path.join(src, GROUP_FILE)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f'  ! groups.json 读取失败（忽略分组）：{e}', file=sys.stderr)
+        return None
+    groups = data.get('groups') if isinstance(data, dict) else None
+    if not isinstance(groups, list) or not groups:
+        return None
+    result = []
+    for g in groups:
+        if not isinstance(g, dict):
+            continue
+        name = str(g.get('name', '')).strip()
+        chaps = g.get('chapters')
+        if not name or not isinstance(chaps, list):
+            continue
+        result.append({'name': name, 'chapters': [str(c) for c in chaps]})
+    return result or None
+
+
+def ordered_chapters(chapters, groups):
+    """章节显示顺序：分组内按配置顺序、组按配置顺序，未分组章节按默认顺序排在最后。"""
+    if not groups:
+        return list(chapters)
+    chapter_set = set(chapters)
+    ordered, seen = [], set()
+    for g in groups:
+        for name in g['chapters']:
+            if name in chapter_set and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+    for name in chapters:
+        if name not in seen:
+            ordered.append(name)
+    return ordered
+
+
+def to_sidebar_item(entry):
+    """把章节导航条目（带 type 标记）转成 VitePress 侧边栏条目形式。"""
+    if entry.get('type') == 'group':
+        return {'text': entry['text'], 'collapsed': True, 'items': entry['items']}
+    return {'text': entry['text'], 'link': entry['link']}
+
+
+def first_leaf_link(entry):
+    """取一个（可能嵌套的）导航条目里第一篇文档的链接。"""
+    if 'items' in entry:
+        for it in entry['items']:
+            if 'link' in it:
+                return it['link']
+            if 'items' in it:
+                link = first_leaf_link(it)
+                if link:
+                    return link
+    return entry.get('link')
 
 
 def to_ascii_slug(title, fallback='md2website'):
@@ -1724,9 +1797,9 @@ def write(path, content):
 
 
 def copy_chapter(src_dir, dst_dir, src_root, url_map):
-    """复制目录下所有 md 与图片，保持相对结构；改写正文指向 .md 的链接为站点 URL。"""
+    """复制目录下所有 md 与图片/视频等媒体资源，保持相对结构；改写正文指向 .md 的链接为站点 URL。"""
     os.makedirs(dst_dir, exist_ok=True)
-    count = {'md': 0, 'img': 0, 'link': 0}
+    count = {'md': 0, 'img': 0, 'vid': 0, 'link': 0}
 
     for dirpath, dirnames, filenames in os.walk(src_dir):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith('.')]
@@ -1759,6 +1832,9 @@ def copy_chapter(src_dir, dst_dir, src_root, url_map):
             elif ext in IMG_EXTS:
                 shutil.copy2(src, os.path.join(target_dir, fn))
                 count['img'] += 1
+            elif ext in VIDEO_EXTS:
+                shutil.copy2(src, os.path.join(target_dir, fn))
+                count['vid'] += 1
     return count
 
 
@@ -1904,16 +1980,21 @@ def main():
         url_map[posix(fn)] = f"/{slug}"
 
     # ---- 逐章复制 ----
-    nav_entries = []
+    chapter_entry = {}
     feature_items = []
-    total = {'md': 0, 'img': 0, 'link': 0}
+    total = {'md': 0, 'img': 0, 'vid': 0, 'link': 0}
+    groups = read_groups(src)
+    if groups:
+        print(f'  已读取分组配置 groups.json（{len(groups)} 组）')
+    ordered = ordered_chapters(chapters, groups)
 
-    for idx, name in enumerate(chapters, 1):
+    for idx, name in enumerate(ordered, 1):
         src_dir = os.path.join(src, name)
         slug = chapter_slugs[name]
         cnt = copy_chapter(src_dir, os.path.join(docs, slug), src, url_map)
         total['md'] += cnt['md']
         total['img'] += cnt['img']
+        total['vid'] += cnt['vid']
         total['link'] += cnt['link']
         num = f'{idx:02d}'
 
@@ -1921,17 +2002,17 @@ def main():
         if len(tree) == 1 and 'items' not in tree[0]:
             # 单文档章节
             heading = tree[0]['text']
-            nav_entries.append({"type": "single", "text": heading, "link": tree[0]['link']})
+            chapter_entry[name] = {"type": "single", "text": heading, "link": tree[0]['link']}
             feature_items.append(
                 f'  - title: {json.dumps(num + " " + heading, ensure_ascii=False)}\n'
                 f'    details: {json.dumps("共 " + str(cnt["md"]) + " 篇文档", ensure_ascii=False)}\n'
                 f'    link: /{slug}/'
             )
             print(f'  ✓ {num} {heading}  → /{slug}/  '
-                  f'(md {cnt["md"]}, img {cnt["img"]})')
+                  f'(md {cnt["md"]}, img {cnt["img"]}, vid {cnt["vid"]})')
         else:
             # 多文档 或 含子目录：可折叠分组，标题用目录名
-            nav_entries.append({"type": "group", "text": name, "items": tree})
+            chapter_entry[name] = {"type": "group", "text": name, "items": tree}
             feature_items.append(
                 f'  - title: {json.dumps(num + " " + name, ensure_ascii=False)}\n'
                 f'    details: {json.dumps("共 " + str(cnt["md"]) + " 篇文档", ensure_ascii=False)}\n'
@@ -1939,9 +2020,37 @@ def main():
             )
             print(f'  ✓ {num} {name}（{len(tree)} 项）→ /{slug}/')
 
+    # ---- 组装侧边栏导航（支持 groups.json 按学段/主题分组）----
+    if groups:
+        nav_entries = []
+        grouped_names = set()
+        for g in groups:
+            items = []
+            for name in g['chapters']:
+                if name not in chapter_entry:
+                    print(f'  ! groups.json 引用了不存在的章节「{name}」，已忽略', file=sys.stderr)
+                    continue
+                items.append(to_sidebar_item(chapter_entry[name]))
+                grouped_names.add(name)
+            if items:
+                nav_entries.append({"type": "group", "text": g['name'], "items": items})
+        for name in ordered:
+            if name not in grouped_names:
+                nav_entries.append(chapter_entry[name])
+    else:
+        nav_entries = [chapter_entry[name] for name in ordered]
+
     # ---- 根级散装 Markdown 引用的图片目录（如 assets/）一并复制 ----
+    # 章节目录内的资源已由 copy_chapter 复制，这里跳过章节子树，避免重复计数
+    chapter_set = set(chapters)
     for dirpath, dirnames, filenames in os.walk(src):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith('.')]
+        if os.path.relpath(dirpath, src) == '.':
+            dirnames[:] = [d for d in dirnames
+                           if d not in SKIP_DIRS and not d.startswith('.')
+                           and d not in chapter_set]
+        else:
+            dirnames[:] = [d for d in dirnames
+                           if d not in SKIP_DIRS and not d.startswith('.')]
         relp = os.path.relpath(dirpath, src)
         if relp == '.':
             continue
@@ -1949,10 +2058,15 @@ def main():
         for fn in filenames:
             if fn in SKIP_FILES:
                 continue
-            if os.path.splitext(fn)[1].lower() in IMG_EXTS:
+            ext = os.path.splitext(fn)[1].lower()
+            if ext in IMG_EXTS:
                 os.makedirs(target_dir, exist_ok=True)
                 shutil.copy2(os.path.join(dirpath, fn), os.path.join(target_dir, fn))
                 total['img'] += 1
+            elif ext in VIDEO_EXTS:
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.copy2(os.path.join(dirpath, fn), os.path.join(target_dir, fn))
+                total['vid'] += 1
 
     # ---- 根级散装 Markdown ----
     for fn in root_mds:
@@ -1982,8 +2096,7 @@ def main():
         return 1
 
     first = nav_entries[0]
-    first_link = (first["items"][0]["link"] if first["type"] == "group"
-                  else first["link"])
+    first_link = first_leaf_link(first) or '/'
 
     # ---- 生成配置 ----
     chapter_items = ',\n'.join(
@@ -1993,7 +2106,7 @@ def main():
     single_sidebar_items = None
     if len(nav_entries) == 1:
         single = nav_entries[0]
-        single_link = single["items"][0]["link"] if single["type"] == "group" else single["link"]
+        single_link = first_leaf_link(single) or ''
         slug = single_link.strip('/')
         md_path = (os.path.join(docs, slug, 'index.md') if single_link.endswith('/')
                    else os.path.join(docs, slug + '.md'))
@@ -2027,10 +2140,21 @@ def main():
     write(os.path.join(docs, 'public', 'favicon.svg'), make_favicon_svg(title))
     features = '\n'.join(feature_items) if feature_items else (
         f'  - title: 开始阅读\n    details: 打开第一篇文档\n    link: {first_link}')
+    chapter_count = len(chapters) + len([fn for fn in root_mds
+                                         if os.path.splitext(fn)[0].lower() not in ('readme', 'index')])
+    tagline = f'共 {chapter_count} 个章节'
+    if groups:
+        parts = []
+        for g in groups:
+            cnt = sum(1 for n in g['chapters'] if n in chapter_entry)
+            if cnt:
+                parts.append(f'{g["name"]} {cnt}')
+        if parts:
+            tagline += ' · ' + ' · '.join(parts)
     write(os.path.join(docs, 'index.md'), render(HOME_TMPL, {
         'TITLE': title,
         'SUBTITLE': args.subtitle or '文档站',
-        'TAGLINE': f'共 {len(nav_entries)} 个章节',
+        'TAGLINE': tagline,
         'FIRST': first_link,
         'FEATURES': features,
     }))
@@ -2066,6 +2190,8 @@ def main():
         print(f'  ! 自动修复跳过（{e}），可手动运行 fix.py')
 
     summary = f'\n完成：{total["md"]} 篇 Markdown、{total["img"]} 张图片'
+    if total.get('vid'):
+        summary += f'、{total["vid"]} 个视频'
     if fixed:
         summary += f'，自动修复 {fixed} 处语法冲突'
     if total['link']:
