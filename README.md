@@ -114,6 +114,7 @@ Agent 先用 `sites.py list` 定位站点（多个时让你选），再执行 `u
 | 一键部署 | 打包 → 上传 → 远程解压 → 校验，支持 SSH 密钥或账号密码 |
 | 站点自动登记与更新 | 说「更新站点」即可自动查找并原地重建，多个站点时让你选 |
 | 配置隔离 | 服务器信息只存站点目录的 `.deploy-local.yml`（权限 600，不进 git） |
+| 云存储（可选） | 图片/视频可上传到腾讯云 COS，Markdown 引用改写为 COS/CDN 绝对 URL；默认仍为本地存储 |
 | 门户与子模块 | 用 `--portal` 生成门户聚合多个站点；子模块挂载后门户首页刷新即更新 |
 
 ---
@@ -560,6 +561,45 @@ portal_project: /absolute/path/to/mcp-portal    # 本机门户项目绝对路径
 
 `remote_dir` 里带子目录层级但没配 `portal_project` 时，`deploy.sh` 只打一条告警，不会中断部署。
 
+### 可选：图片/视频上传到腾讯云 COS（云存储）
+
+默认是**本地存储**（图片/视频复制到站点 `docs/` 下）。若想把图片/视频放到对象存储、
+走 CDN 省流量费，可开启 COS 上传；开启后只改生成站点 `docs/**/*.md` 里的资源引用为
+COS/CDN 绝对 URL，源文档不动，本地文件保留作预览兜底。
+
+前提：COS 存储桶需**公有读**，或配置 CDN 加速域名并把 `URL_PREFIX` 填成 CDN 域名。
+
+**配置**（站点目录 `.cos-local.yml`，或全局 `~/.md2website/cos.yml`，权限 600）：
+
+```bash
+python3 scripts/cos.py template                        # 打印模板
+python3 scripts/cos.py template --out .cos-local.yml   # 写入站点目录
+python3 scripts/cos.py set SECRET_ID=... SECRET_KEY=... REGION=ap-guangzhou BUCKET=mybucket-1250000000
+python3 scripts/cos.py check --project .               # 复核
+```
+
+必填：`SECRET_ID`、`SECRET_KEY`、`REGION`、`BUCKET`；可选 `URL_PREFIX`（对外访问前缀，不填用 COS 默认域名 `https://<bucket>.cos.<region>.myqcloud.com`）、`PATH_PREFIX`（桶内子目录，多站点共用桶时隔离）。
+
+**生成时上传**：
+
+```bash
+./build.sh --dir ~/笔记/课程 --out ~/笔记/课程-site --title 我的课程 --cos
+python3 scripts/init.py ~/笔记/课程 --out ~/笔记/课程-site --cos
+python3 scripts/init.py ~/笔记/课程 --out ~/笔记/课程-site --cos-config /path/to/cos.yml
+```
+
+`--cos` 但配置缺失/不完整、或未装 SDK（`pip install cos-python-sdk-v5`）时，会打印 ⚠ 提示并回退到本地存储，不影响建站。
+
+**对已有站点手动同步**：
+
+```bash
+python3 scripts/cos.py sync <站点目录>          # 上传 + 改写
+python3 scripts/cos.py upload <站点目录>/docs   # 只上传
+python3 scripts/cos.py rewrite <站点目录>/docs  # 只改写引用
+```
+
+更新站点时若用了 COS，`update.py` 也要带 `--cos`（否则原地重建会回到本地引用）。
+
 ### 安全说明
 
 - **凭据存储**：配置档（`~/.workbuddy/deploy-profiles`，权限 `700`）与站点本地 `.deploy-local.yml`（权限 `600`）均含明文服务器信息，且已被 `.gitignore` 忽略，不会被上传或提交。
@@ -585,6 +625,7 @@ portal_project: /absolute/path/to/mcp-portal    # 本机门户项目绝对路径
 | `scripts/sites.py` | 查找已生成的站点（`list/select`） | 只读 |
 | `scripts/update.py` | 更新已有站点：重建 + 构建，可选部署 | 写站点目录，备份到 `.backup/` |
 | `scripts/profile.py` | 部署配置档管理（`path/show/check/set/list/bind/cache/wizard/submodule/template`） | 写 `~/.workbuddy/deploy-profiles/` 或站点 `.deploy-local.yml` |
+| `scripts/cos.py` | 腾讯云 COS 云存储：上传图片/视频并改写引用（`template/set/show/check/upload/rewrite/sync`） | 上传 COS，改写站点 `docs/**/*.md` |
 | `assets/build.sh` | 一键入口：扫描 → 生成 → 装依赖 → 构建 → 预览 | 写输出目录 |
 | `assets/deploy.sh` | 构建 + 打包上传 + 远程解压 + 校验 | 写本地临时包 |
 

@@ -12,6 +12,8 @@
 #   ./build.sh --dir <md目录>   指定源目录
 #   ./build.sh --no-open        构建完不自动打开浏览器
 #   ./build.sh --skill <路径>   手动指定 skill 本体位置
+#   ./build.sh --cos            图片/视频上传到腾讯云 COS 并改写引用
+#   ./build.sh --cos-config <文件>  指定 COS 配置文件
 # ============================================================
 # HELP_END
 set -euo pipefail
@@ -73,6 +75,8 @@ NAME=""
 WIZARD="false"
 DO_OPEN="true"
 NO_BUILD="false"
+COS_FLAG=""
+COS_CONFIG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --wizard) WIZARD="true" ;;
@@ -88,6 +92,9 @@ while [ $# -gt 0 ]; do
     --skill) [ $# -ge 2 ] || die "--skill 需要跟路径"; SKILL_DIR="$2"; shift ;;
     --no-open) DO_OPEN="false" ;;
     --no-build) NO_BUILD="true" ;;
+    --cos) COS_FLAG="--cos" ;;
+    --cos-config) [ $# -ge 2 ] || die "--cos-config 需要跟路径"; COS_CONFIG="$2"; shift ;;
+    --cos-config=*) COS_CONFIG="${1#*=}" ;;
     -h|--help)
       sed -n '/^# 一键建站/,/^# HELP_END/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' | sed '$d'
       exit 0 ;;
@@ -183,6 +190,7 @@ fi
 info "扫描并生成站点"
 "$PY" "$SKILL_DIR/scripts/init.py" "$SRC_DIR" \
   --out "$OUT_DIR" --title "$TITLE" ${SUBTITLE:+--subtitle "$SUBTITLE"} ${NAME:+--name "$NAME"} \
+  ${COS_FLAG:+--cos} ${COS_CONFIG:+--cos-config "$COS_CONFIG"} \
   | sed 's/^/  /'
 
 [ -f "$OUT_DIR/DEPLOY.md" ] || die "生成失败，请检查上面的输出"

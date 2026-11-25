@@ -1309,6 +1309,42 @@ body {
   transform: translateY(-3px);
 }
 
+/* 首页分类导航（大分组卡片） */
+.group-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 20px 0 8px;
+}
+.group-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--vp-c-brand-soft);
+  border-radius: 12px;
+  background: var(--vp-c-bg-elv);
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+  background-image: none;
+  transition: box-shadow 0.25s, transform 0.25s, border-color 0.25s;
+}
+.group-card:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.18);
+  transform: translateY(-3px);
+  background-image: none;
+}
+.group-card-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+}
+.group-card-count {
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb {
@@ -1568,6 +1604,8 @@ features:
 @@FEATURES@@
 ---
 
+@@GROUP_NAV@@
+
 ## 文档说明
 
 本站在 Markdown 源文档基础上构建，支持左侧章节导航、页面内目录、全文搜索、代码复制、深浅色主题与图片放大。
@@ -1698,6 +1736,9 @@ GITIGNORE = '''# 部署配置（含服务器敏感信息，勿提交）
 .deploy-local.yml
 .deploy-profile
 deploy.conf
+
+# COS 云存储配置（含密钥，勿提交）
+.cos-local.yml
 
 # 依赖
 node_modules/
@@ -1917,6 +1958,10 @@ def main():
                     help='生成门户站点（聚合子模块入口，无需源目录）')
     ap.add_argument('--force', action='store_true',
                     help='原地重建：清理旧生成物后重新生成，保留部署配置与依赖')
+    ap.add_argument('--cos', action='store_true',
+                    help='图片/视频等资源上传到腾讯云 COS 并改写引用（需已配置 COS）')
+    ap.add_argument('--cos-config', default=None,
+                    help='COS 配置文件路径（默认读站点 .cos-local.yml 或全局 ~/.md2website/cos.yml）')
     args = ap.parse_args()
 
     if args.portal:
@@ -2151,12 +2196,35 @@ def main():
                 parts.append(f'{g["name"]} {cnt}')
         if parts:
             tagline += ' · ' + ' · '.join(parts)
+    # 首页「分类导航」：把 groups.json 的大分组（如 初中/高中/大学）渲染为可点击卡片
+    group_nav = ''
+    if groups:
+        cards = []
+        for g in groups:
+            names = [n for n in g['chapters'] if n in chapter_entry]
+            if not names:
+                continue
+            link = first_leaf_link(chapter_entry[names[0]])
+            if not link:
+                continue
+            rel = link.lstrip('/')
+            name_esc = (g['name'].replace('&', '&amp;').replace('<', '&lt;')
+                        .replace('>', '&gt;').replace('"', '&quot;'))
+            cards.append(
+                '<a class="group-card" href="' + rel + '">'
+                '<span class="group-card-name">' + name_esc + '</span>'
+                '<span class="group-card-count">' + str(len(names)) + ' 个章节</span>'
+                '</a>')
+        if cards:
+            group_nav = ('## 分类导航\n\n<div class="group-nav">\n  '
+                         + '\n  '.join(cards) + '\n</div>')
     write(os.path.join(docs, 'index.md'), render(HOME_TMPL, {
         'TITLE': title,
         'SUBTITLE': args.subtitle or '文档站',
         'TAGLINE': tagline,
         'FIRST': first_link,
         'FEATURES': features,
+        'GROUP_NAV': group_nav,
     }))
     write(os.path.join(out, 'package.json'), render(PACKAGE_JSON, {
         'NAME': site_name,
@@ -2188,6 +2256,52 @@ def main():
                     fixed += len(fixer.fix_file(os.path.join(dirpath, fn), dry=False))
     except Exception as e:
         print(f'  ! 自动修复跳过（{e}），可手动运行 fix.py')
+
+    # ---- 可选：图片/视频等资源上传到腾讯云 COS 并改写引用（默认仍为本地存储）----
+    if args.cos or args.cos_config:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import cos as cosmod
+            cfg_path, cfg_source = cosmod.find_config(args.cos_config, out)
+            if args.cos_config and not os.path.isfile(cfg_path):
+                print(f'\n⚠ 指定的 COS 配置文件不存在: {args.cos_config}，'
+                      f'已跳过云存储，资源保持本地存储')
+            elif not os.path.isfile(cfg_path):
+                print(f'\n⚠ 未找到 COS 配置（{cfg_source}），已跳过云存储，资源保持本地存储')
+                print('  可用 python3 cos.py set 写入全局配置，或 cos.py template 生成模板')
+            else:
+                cosdata = cosmod.parse_cfg(cfg_path)
+                miss = cosmod.missing_of(cosdata)
+                if miss:
+                    print(f'\n⚠ COS 配置不完整（{cfg_source}），缺: {", ".join(miss)}，'
+                          f'已跳过云存储，资源保持本地存储')
+                    print('  补全后再执行: python3 cos.py sync "<站点目录>" 上传并改写')
+                else:
+                    try:
+                        import qcloud_cos  # noqa: F401
+                        sdk_ok = True
+                    except ImportError:
+                        sdk_ok = False
+                    if not sdk_ok:
+                        print('\n⚠ 未安装腾讯云 COS SDK，已跳过云存储，资源保持本地存储')
+                        print('  安装后执行: pip install cos-python-sdk-v5')
+                    else:
+                        docs_root = os.path.join(out, 'docs')
+                        n_assets = len(cosmod.iter_assets(docs_root))
+                        print(f'\n上传资源到 COS（{cosdata["BUCKET"].strip()}，'
+                              f'前缀 {cosmod.base_url(cosdata)}/）… 共 {n_assets} 个')
+                        uploaded, failed, errors = cosmod.upload_docs(docs_root, cosdata, dry=False)
+                        print(f'  上传成功 {uploaded}，失败 {failed}')
+                        for rel, err in errors:
+                            print(f'    ! {rel}: {err}')
+                        if not failed:
+                            rw_total, rw_files, _ = cosmod.rewrite_docs(
+                                docs_root, cosmod.base_url(cosdata), dry=False)
+                            print(f'  已改写 {rw_total} 处资源引用为云存储 URL（{rw_files} 个文件）')
+                        else:
+                            print('  部分资源上传失败，引用未改写，保持本地。')
+        except Exception as e:
+            print(f'\n⚠ COS 上传跳过（{e}），资源保持本地存储')
 
     summary = f'\n完成：{total["md"]} 篇 Markdown、{total["img"]} 张图片'
     if total.get('vid'):

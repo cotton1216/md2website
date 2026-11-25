@@ -59,6 +59,8 @@ cp ~/.workbuddy/skills/md2website/assets/build.sh ~/你的md目录/
 | `--title "标题"` | 指定站点标题 |
 | `--no-open` | 构建完不自动打开浏览器 |
 | `--no-build` | 只生成，不装依赖、不构建 |
+| `--cos` | 图片/视频上传到腾讯云 COS 并改写引用（需先 `cos.py set` 配置） |
+| `--cos-config <文件>` | 指定 COS 配置文件（默认读站点 `.cos-local.yml` 或全局 `~/.md2website/cos.yml`） |
 
 > macOS 首次双击若提示“无法打开”，在终端执行一次 `chmod +x build.sh`，或在
 > 「系统设置 → 隐私与安全性」里点“仍要打开”。

@@ -322,7 +322,7 @@ install_one() {
   chmod +x "$target/assets/deploy.sh" "$target/assets/build.sh" "$target/install.sh" 2>/dev/null || true
   chmod +x "$target"/scripts/*.py 2>/dev/null || true
 
-  for f in SKILL.md scripts/init.py scripts/scan.py scripts/fix.py scripts/profile.py scripts/sites.py scripts/update.py assets/deploy.sh assets/build.sh; do
+  for f in SKILL.md scripts/init.py scripts/scan.py scripts/fix.py scripts/profile.py scripts/sites.py scripts/update.py scripts/cos.py assets/deploy.sh assets/build.sh; do
     if [ ! -f "$target/$f" ]; then
       warn "安装不完整，缺少 ${f}：${target}"
       return 1

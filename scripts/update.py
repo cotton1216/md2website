@@ -147,6 +147,9 @@ def main():
     ap.add_argument('--dry-run', action='store_true', help='只显示计划')
     ap.add_argument('--no-backup', action='store_true', help='不备份 .vitepress 配置')
     ap.add_argument('--no-build', action='store_true', help='只重新生成，不构建')
+    ap.add_argument('--cos', action='store_true',
+                    help='重新生成后把图片/视频上传到腾讯云 COS 并改写引用')
+    ap.add_argument('--cos-config', default=None, help='COS 配置文件路径')
     args = ap.parse_args()
 
     site = choose(args.site)
@@ -194,6 +197,10 @@ def main():
            '--title', title, '--base', base]
     if site_name:
         cmd += ['--name', site_name]
+    if args.cos:
+        cmd += ['--cos']
+    if args.cos_config:
+        cmd += ['--cos-config', args.cos_config]
     if run(cmd, os.path.dirname(site)) != 0:
         print('重新生成失败', file=sys.stderr)
         return 1

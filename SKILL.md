@@ -4,7 +4,7 @@ display_name: Markdown 文档站生成器
 display_name_en: Markdown Documentation Website Builder
 description_zh: "将 Markdown 教程、笔记、课件和手册转换为支持导航、全文搜索、代码高亮和图片放大的文档站，支持站点更新、门户聚合及远程部署。"
 description_en: "Convert Markdown tutorials, notes, and manuals into documentation websites with navigation, full-text search, syntax highlighting, and image zoom. Supports site updates, portal aggregation, and remote deployment."
-version: 1.0.3
+version: 1.1.0
 examples_zh:
   - "把我的 Markdown 教程目录生成带章节导航、全文搜索、代码高亮和图片放大的文档站，输出到独立目录，不要修改源文档。"
   - "更新已有的 Markdown 文档站，自动识别新增章节并重新构建，保留现有部署配置，先不要部署到服务器。"
@@ -66,6 +66,7 @@ python3 $SKILL_DIR/scripts/_env.py
 - `scripts/profile.py` — 部署配置档管理（set/bind/cache/list/show/check/wizard/submodule/template）
 - `scripts/sites.py` — 查找已生成的站点（list/select，支持 JSON 输出）
 - `scripts/update.py` — 更新已有站点（重建 + 构建，可选部署）
+- `scripts/cos.py` — 腾讯云 COS 云存储（可选）：上传图片/视频并改写引用（template/set/show/check/upload/rewrite/sync）
 - `assets/deploy.sh` — 一键部署脚本（init 时复制到项目里）
 
 
@@ -347,6 +348,51 @@ python3 "$SKILL_DIR"/scripts/update.py "<站点目录>" --dry-run  # 只看计�
 | 加图片 | 放进该章 `assets/`，正文用相对路径 |
 | 加视频 | 放进该章目录（或 `assets/`），正文用相对路径；`update.py` 重建时自动复制 |
 | 新增章节 | 优先跑 `update.py`；手改则必须在 `config.mjs` 的 chapters 数组加一条 |
+
+## 可选：图片/视频上传到腾讯云 COS（云存储）
+
+默认仍是**本地存储**：图片/视频复制到站点 `docs/` 下，随站点一起构建部署。
+只有用户明确要「图片/视频放云存储 / 走 CDN / 省流量费」时才开启 COS：
+
+- 上传对象：`docs/` 下的图片与视频（png/jpg/jpeg/gif/webp/svg/bmp/ico、mp4/webm/mov/m4v/mkv）
+- 上传后**不改源文档**，只把生成站点 `docs/**/*.md` 里的资源引用改成 COS/CDN 绝对 URL；本地文件保留作预览兜底
+- 前提：COS 存储桶需**公有读**，或配置 CDN 加速域名并把 `URL_PREFIX` 填成 CDN 域名
+
+### 配置
+
+配置放在站点目录 `.cos-local.yml`（权限 600，已入 `.gitignore`）或全局 `~/.md2website/cos.yml`：
+
+```bash
+python3 "$SKILL_DIR"/scripts/cos.py template                        # 打印模板
+python3 "$SKILL_DIR"/scripts/cos.py template --out .cos-local.yml   # 写入站点目录
+python3 "$SKILL_DIR"/scripts/cos.py set SECRET_ID=... SECRET_KEY=... REGION=ap-guangzhou BUCKET=mybucket-1250000000
+python3 "$SKILL_DIR"/scripts/cos.py check --project "<站点目录>"
+```
+
+必填：`SECRET_ID`、`SECRET_KEY`、`REGION`、`BUCKET`；可选 `URL_PREFIX`（对外访问前缀，不填用 COS 默认域名）、`PATH_PREFIX`（桶内子目录，多站点共用桶时隔离）。
+
+### 生成时上传（一键）
+
+```bash
+bash "$SKILL_DIR/assets/build.sh" --dir "<md目录>" --out "<输出>" --title "标题" --cos
+python3 "$SKILL_DIR"/scripts/init.py "<md目录>" --out "<输出>" --cos
+python3 "$SKILL_DIR"/scripts/init.py "<md目录>" --out "<输出>" --cos-config "<配置文件>"
+```
+
+`--cos` 但配置缺失/不完整、或本机未装 SDK（`pip install cos-python-sdk-v5`）时，
+会打印 ⚠ 提示并**回退到本地存储**，不会让整个建站失败。
+
+### 对已有站点手动同步
+
+```bash
+python3 "$SKILL_DIR"/scripts/cos.py sync "<站点目录>"          # 上传 + 改写
+python3 "$SKILL_DIR"/scripts/cos.py upload "<站点目录>/docs"   # 只上传
+python3 "$SKILL_DIR"/scripts/cos.py rewrite "<站点目录>/docs"  # 只改写引用
+```
+
+更新站点时若用了 COS，`update.py` 也要带 `--cos`（否则原地重建会回到本地引用）。
+
+核验：改写后 `grep -rl "cos.<region>.myqcloud.com" docs` 或 `grep -rl "$URL_PREFIX" docs` 应命中引用过资源的 md；构建后看线上图片是否从 CDN/对象存储域名加载。
 
 ## 门户与子模块（多站点聚合）
 
