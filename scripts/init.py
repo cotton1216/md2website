@@ -2223,7 +2223,7 @@ def main():
         'SUBTITLE': args.subtitle or '文档站',
         'TAGLINE': tagline,
         'FIRST': first_link,
-        'FEATURES': features,
+        'FEATURES': features if not groups else '',
         'GROUP_NAV': group_nav,
     }))
     write(os.path.join(out, 'package.json'), render(PACKAGE_JSON, {
