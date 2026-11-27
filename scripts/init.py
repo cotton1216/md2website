@@ -1344,6 +1344,26 @@ body {
   font-size: 13px;
   color: var(--vp-c-text-2);
 }
+.group-card-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.group-nav .chapter-link {
+  font-size: 14px;
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  background-image: none;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.group-nav .chapter-link:hover {
+  color: var(--vp-c-brand-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background-image: none;
+}
 
 /* 滚动条 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -2045,9 +2065,11 @@ def main():
 
         tree = build_dir_tree(src_dir, slug)
         if len(tree) == 1 and 'items' not in tree[0]:
-            # 单文档章节
+            # 单文档章节：章节名（专题名）作分组标题，文章标题作其子项，
+            # 让导航里能看到专题名，而不只是文章标题
             heading = tree[0]['text']
-            chapter_entry[name] = {"type": "single", "text": heading, "link": tree[0]['link']}
+            chapter_entry[name] = {"type": "group", "text": name,
+                                   "items": [{"text": heading, "link": tree[0]['link']}]}
             feature_items.append(
                 f'  - title: {json.dumps(num + " " + heading, ensure_ascii=False)}\n'
                 f'    details: {json.dumps("共 " + str(cnt["md"]) + " 篇文档", ensure_ascii=False)}\n'
@@ -2204,17 +2226,27 @@ def main():
             names = [n for n in g['chapters'] if n in chapter_entry]
             if not names:
                 continue
-            link = first_leaf_link(chapter_entry[names[0]])
-            if not link:
-                continue
-            rel = link.lstrip('/')
             name_esc = (g['name'].replace('&', '&amp;').replace('<', '&lt;')
                         .replace('>', '&gt;').replace('"', '&quot;'))
+            # 每个章节（专题）渲染为一个带专题名的链接，专题名直接列在分组下方
+            chapter_links = []
+            for n in names:
+                link = first_leaf_link(chapter_entry[n])
+                if not link:
+                    continue
+                rel = link.lstrip('/')
+                n_esc = (n.replace('&', '&amp;').replace('<', '&lt;')
+                         .replace('>', '&gt;').replace('"', '&quot;'))
+                chapter_links.append(
+                    '<a class="chapter-link" href="' + rel + '">' + n_esc + '</a>')
+            if not chapter_links:
+                continue
             cards.append(
-                '<a class="group-card" href="' + rel + '">'
+                '<div class="group-card">'
                 '<span class="group-card-name">' + name_esc + '</span>'
-                '<span class="group-card-count">' + str(len(names)) + ' 个章节</span>'
-                '</a>')
+                '<span class="group-card-count">' + str(len(chapter_links)) + ' 个章节</span>'
+                '<div class="group-card-chapters">' + ''.join(chapter_links) + '</div>'
+                '</div>')
         if cards:
             group_nav = ('## 分类导航\n\n<div class="group-nav">\n  '
                          + '\n  '.join(cards) + '\n</div>')
